@@ -20,7 +20,7 @@ namespace GraphiteCompanion.Services
     public static class UpdateService
     {
         /// <summary>GitHub repository "owner/name" with the releases. Can be overridden by update-repo.txt next to the exe.</summary>
-        public const string DefaultRepo = "";
+        public const string DefaultRepo = "RomanGeniev/io-companion";
 
         public static string Repo
         {
