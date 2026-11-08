@@ -350,14 +350,15 @@
                         <!-- shown for headsets without the C-Media equalizer -->
                         <Border x:Name="EqUnavailable" Grid.ColumnSpan="2" Visibility="Collapsed" Background="{DynamicResource CardBrush}"
                                 CornerRadius="12" Opacity="0.96">
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="440">
-                                <Border Width="52" Height="52" CornerRadius="14" Background="{DynamicResource InsetBrush}" HorizontalAlignment="Center">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="460" Margin="0,8">
+                                <Border x:Name="EqUnavailableIcon" Width="52" Height="52" CornerRadius="14" Background="{DynamicResource InsetBrush}" HorizontalAlignment="Center">
                                     <TextBlock Text="&#xE9E9;" FontFamily="{StaticResource IconFont}" FontSize="22" Foreground="{DynamicResource SubTextBrush}"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <TextBlock Text="Эквалайзер недоступен для этих наушников" FontSize="16" FontWeight="SemiBold"
                                            HorizontalAlignment="Center" Margin="0,14,0,6"/>
-                                <TextBlock TextAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource SubTextBrush}"
+                                <TextBlock x:Name="EqUnavailableText" TextAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource SubTextBrush}"
                                            Text="Встроенный эквалайзер есть у гарнитур на чипе C-Media (например io Graphite 2 Pro). Громкость, микрофон, автоматика, анализатор и тесты работают с любыми наушниками."/>
                                 <!-- one-click official driver install for io Graphite headsets -->
                                 <StackPanel x:Name="DriverOffer" Visibility="Collapsed" Margin="0,18,0,0">
@@ -376,9 +377,24 @@
                                     </Grid>
                                     <TextBlock x:Name="DriverStatus" Margin="0,10,0,0" TextAlignment="Center" TextWrapping="Wrap" FontSize="12"
                                                Foreground="{DynamicResource SubTextBrush}"
-                                               Text="Graphite 2 Wireless FE драйвер не поддерживает — для неё эквалайзер недоступен."/>
+                                               Text="Для Graphite 2 Wireless FE драйвера у производителя нет — для неё подойдёт вариант ниже."/>
                                 </StackPanel>
+                                <!-- Equalizer APO: equalizer for any headphones -->
+                                <Border x:Name="ApoOffer" Visibility="Collapsed" Margin="0,18,0,0" Padding="16,14" CornerRadius="12"
+                                        Background="{DynamicResource InsetBrush}">
+                                    <StackPanel>
+                                        <TextBlock x:Name="ApoTitle" TextAlignment="Center" FontWeight="SemiBold" TextWrapping="Wrap"
+                                                   Text="Эквалайзер для любых наушников"/>
+                                        <TextBlock x:Name="ApoText" Margin="0,6,0,12" TextAlignment="Center" TextWrapping="Wrap" FontSize="12"
+                                                   Foreground="{DynamicResource SubTextBrush}"
+                                                   Text="IO Companion поставит бесплатный Equalizer APO и будет управлять им сам. В его окне один раз отметьте свои наушники, потом перезагрузите компьютер."/>
+                                        <Button x:Name="ApoButton" Style="{StaticResource AccentButton}" HorizontalAlignment="Center" MinWidth="220" Click="ApoButton_Click">
+                                            <TextBlock x:Name="ApoButtonText" Text="Включить эквалайзер"/>
+                                        </Button>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
+                            </ScrollViewer>
                         </Border>
                     </Grid>
 

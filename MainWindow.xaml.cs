@@ -642,7 +642,7 @@ namespace GraphiteCompanion
 
             if (session.Eq != null)
             {
-                SetStatus(true, "Подключено · встроенный эквалайзер C-Media");
+                SetStatus(true, session.Eq is CmEqController ? "Подключено · встроенный эквалайзер C-Media" : "Подключено · эквалайзер Equalizer APO");
                 ShowBanner(null);
                 ScheduleApply();
             }

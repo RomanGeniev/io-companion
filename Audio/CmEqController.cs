@@ -11,7 +11,7 @@ namespace GraphiteCompanion.Audio
     /// property store - the same place the official Audio Center writes to.
     /// Property {bd341ffb-…},0 = EQ on/off, ,1..,10 = gains in dB for 30 Hz … 16 kHz (-20…+20).
     /// </summary>
-    public sealed class CmEqController : IDisposable
+    public sealed class CmEqController : IEqualizer
     {
         public static readonly Guid StoreContext = new("4c6c316b-c24f-421c-a266-690540cabd11");
         private static readonly Guid EqFormat = new("bd341ffb-9fd1-4ed4-8159-7999d546ea8a");
@@ -21,6 +21,8 @@ namespace GraphiteCompanion.Audio
         private IPropertyStore? user;
         private IPropertyStore? defaults;
         private string? registryPath;
+
+        public string Engine => "C-Media";
 
         private CmEqController(IAudioSystemEffectsPropertyStore fx, IPropertyStore user, IPropertyStore? defaults)
         {

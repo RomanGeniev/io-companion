@@ -125,7 +125,8 @@ namespace GraphiteCompanion.Audio
         private IAudioEndpointVolume? volume;
 
         public AudioDeviceInfo Info { get; }
-        public CmEqController? Eq { get; }
+        /// <summary>Headset C-Media equalizer, or Equalizer APO for any other output device.</summary>
+        public IEqualizer? Eq { get; }
         public ApoPropertyStore? Effects { get; }
 
         internal AudioDeviceSession(AudioDeviceInfo info, IMMDevice device)
@@ -137,7 +138,8 @@ namespace GraphiteCompanion.Audio
             if (device.Activate(ref iid, Native.ClsCtxAll, IntPtr.Zero, out object obj) == 0)
                 volume = obj as IAudioEndpointVolume;
 
-            Eq = CmEqController.TryOpen(device, info.Id);
+            Eq = (IEqualizer?)CmEqController.TryOpen(device, info.Id)
+                 ?? (info.Id.StartsWith("{0.0.0", StringComparison.Ordinal) ? EqApoController.TryOpen(info.Id) : null);
             Effects = ApoPropertyStore.Open(device, info.Id);
         }
 

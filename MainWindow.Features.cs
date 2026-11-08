@@ -61,7 +61,7 @@ namespace GraphiteCompanion
             string name = session.Info.Name;
             int open = name.IndexOf('('), close = name.LastIndexOf(')');
             string hw = open >= 0 && close > open ? name.Substring(open + 1, close - open - 1) : name;
-            BrandSubtitle.Text = hw + (session.Eq != null ? " · C-Media" : "");
+            BrandSubtitle.Text = hw + (session.Eq != null ? " · " + session.Eq.Engine : "");
         }
 
         // ===================== Analyzer & mic meter =====================
@@ -89,6 +89,7 @@ namespace GraphiteCompanion
             EffectsProfileText.Visibility = noEffects ? Visibility.Collapsed : Visibility.Visible;
             if (noEffects) foreach (var c in outputCards) c.Visibility = Visibility.Collapsed;
             UpdateDriverOffer();
+            UpdateApoOffer();
         }
 
         /// <summary>Runs the analyzer / mic meter only while they are actually visible.</summary>
