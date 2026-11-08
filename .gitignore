@@ -1,0 +1,7 @@
+bin/
+obj/
+App/
+Share/
+*.user
+*.suo
+.vs/
