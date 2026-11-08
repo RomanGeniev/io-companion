@@ -43,6 +43,7 @@ namespace GraphiteCompanion
             hadDevice = session != null;
             InitAppearance();
             InitUpdates();
+            InitDriver();
             UpdateBrand();
             UpdateMeters();
         }
@@ -87,6 +88,7 @@ namespace GraphiteCompanion
             ResetEffectsButton.Visibility = noEffects ? Visibility.Collapsed : Visibility.Visible;
             EffectsProfileText.Visibility = noEffects ? Visibility.Collapsed : Visibility.Visible;
             if (noEffects) foreach (var c in outputCards) c.Visibility = Visibility.Collapsed;
+            UpdateDriverOffer();
         }
 
         /// <summary>Runs the analyzer / mic meter only while they are actually visible.</summary>
