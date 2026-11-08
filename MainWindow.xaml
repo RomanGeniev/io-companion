@@ -17,12 +17,12 @@
         </Grid.ColumnDefinitions>
 
         <!-- ================= SIDEBAR ================= -->
-        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer x:Name="SidebarScroll" Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel>
 
                 <!-- Brand -->
                 <StackPanel Orientation="Horizontal" Margin="4,2,0,18">
-                    <Border x:Name="BrandLogo" Width="40" Height="40" CornerRadius="11" Background="{DynamicResource AccentGradient}" MouseLeftButtonDown="BrandLogo_MouseLeftButtonDown">
+                    <Border x:Name="BrandLogo" Width="40" Height="40" CornerRadius="11" Background="{DynamicResource AccentGradient}">
                         <TextBlock Text="&#xE7F6;" FontFamily="{StaticResource IconFont}" FontSize="19" Foreground="White"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
@@ -414,7 +414,7 @@
                         </Button>
                     </StackPanel>
                 </Grid>
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer x:Name="EffectsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
                         <TextBlock x:Name="EffectsProfileText" Margin="2,0,0,8" FontSize="12" Foreground="{DynamicResource SubTextBrush}"/>
                         <TextBlock x:Name="EffectsEmpty" Visibility="Collapsed" Margin="2,4,0,12" TextWrapping="Wrap" Foreground="{DynamicResource SubTextBrush}"

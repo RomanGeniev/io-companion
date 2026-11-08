@@ -10,7 +10,7 @@
     <AssemblyName>GraphiteCompanion</AssemblyName>
     <RootNamespace>GraphiteCompanion</RootNamespace>
     <Product>IO Companion</Product>
-    <Version>1.4.0</Version>
+    <Version>1.4.1</Version>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <NoWarn>$(NoWarn);WPF0001</NoWarn>
   </PropertyGroup>

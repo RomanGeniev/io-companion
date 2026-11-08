@@ -50,6 +50,15 @@ namespace GraphiteCompanion
 
         private void ApplyTheme()
         {
+            // switching the Fluent theme re-creates control templates, which resets scroll positions;
+            // remember them so the window stays where the user was
+            var scrollers = new[] { SidebarScroll, EffectsScroll, PageMic, PageAuto };
+            var offsets = Array.ConvertAll(scrollers, s => s.VerticalOffset);
+            void RestoreScroll()
+            {
+                for (int i = 0; i < scrollers.Length; i++) scrollers[i].ScrollToVerticalOffset(offsets[i]);
+            }
+
             ThemeManager.Apply(settings.Theme, settings.Accent);
             var accent = ThemeManager.Current;
             tray.SetAccent(accent.A, accent.B);
@@ -66,6 +75,10 @@ namespace GraphiteCompanion
             RebuildRules();
             osd?.Close();
             osd = null;
+
+            RestoreScroll();
+            Dispatcher.BeginInvoke(new Action(RestoreScroll), System.Windows.Threading.DispatcherPriority.Loaded);
+            Dispatcher.BeginInvoke(new Action(RestoreScroll), System.Windows.Threading.DispatcherPriority.ContextIdle);
 
             // soft cross-fade of the whole window
             if (Content is UIElement root)

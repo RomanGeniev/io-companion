@@ -41,7 +41,6 @@ namespace GraphiteCompanion
             IsVisibleChanged += (_, _) => UpdateMeters();
             StateChanged += (_, _) => UpdateMeters();
             hadDevice = session != null;
-            InitPrank();
             InitAppearance();
             InitUpdates();
             UpdateBrand();
@@ -51,8 +50,6 @@ namespace GraphiteCompanion
         private void DisposeFeatures()
         {
             visualTimer?.Stop();
-            StopPrank();
-            alarm.Dispose();
             analyzer.Dispose();
             micMeter.Dispose();
         }

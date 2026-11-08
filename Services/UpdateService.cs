@@ -66,7 +66,6 @@ namespace GraphiteCompanion.Services
             var asset = root.GetProperty("assets").EnumerateArray()
                 .Select(a => (name: a.GetProperty("name").GetString() ?? "", url: a.GetProperty("browser_download_url").GetString() ?? ""))
                 .Where(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) || a.name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(a => a.name.Contains("будильник", StringComparison.OrdinalIgnoreCase) || a.name.Contains("prank", StringComparison.OrdinalIgnoreCase))
                 .FirstOrDefault();
             if (asset.url == null || asset.url.Length == 0) return null;
             string notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
