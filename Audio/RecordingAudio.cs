@@ -40,6 +40,23 @@ namespace GraphiteCompanion.Audio
 
             private float Sample(byte[] b, int at) => isFloat ? BitConverter.ToSingle(b, at) : BitConverter.ToInt16(b, at) / 32768f;
 
+            /// <summary>
+            /// Any layout → stereo. Headsets with virtual 7.1 make Windows mix in 8 channels
+            /// (FL FR FC LFE BL BR SL SR); only taking the front pair lost everything behind / beside the player.
+            /// </summary>
+            private (float l, float r) Downmix(byte[] b, int at)
+            {
+                float S(int ch) => Sample(b, at + ch * bps);
+                if (channels == 1) { float m = S(0); return (m, m); }
+                float l = S(0), r = S(1);
+                const float k = 0.7071f;
+                if (channels == 4) { l += S(2) * k; r += S(3) * k; return (l, r); }   // quad: FL FR BL BR
+                if (channels >= 3) { float c = S(2) * k; l += c; r += c; }
+                if (channels >= 4) { float lfe = S(3) * 0.5f; l += lfe; r += lfe; }
+                for (int ch = 4; ch + 1 < channels; ch += 2) { l += S(ch) * k; r += S(ch + 1) * k; } // back, side pairs
+                return (l, r);
+            }
+
             private void OnData(object? s, WaveInEventArgs e)
             {
                 int frame = bps * channels;
@@ -47,8 +64,7 @@ namespace GraphiteCompanion.Audio
                 {
                     for (int i = 0; i + frame <= e.BytesRecorded; i += frame)
                     {
-                        float l = Sample(e.Buffer, i), r = channels > 1 ? Sample(e.Buffer, i + bps) : l;
-                        if (channels > 2) { float c = Sample(e.Buffer, i + 2 * bps) * 0.7f; l += c; r += c; } // fold centre in
+                        var (l, r) = Downmix(e.Buffer, i);
                         // linear resample to 48 kHz
                         double step = (double)srcRate / Rate;
                         while (resamplePos <= 1)
@@ -65,9 +81,9 @@ namespace GraphiteCompanion.Audio
 
             // Jitter buffer. Devices deliver in 10–20 ms packets and the pump runs on a ~16 ms timer, so reading
             // the queue dry the moment it has data made the microphone stutter (dozens of 16/32/48 ms gaps of
-            // silence per recording). Keep ~50 ms in reserve and nudge the level by one sample in 400 when the
+            // silence per recording). Keep ~80 ms in reserve and nudge the level by one sample in 400 when the
             // device clock runs slightly faster or slower than the wall clock - inaudible, no clicks.
-            private const int Prime = Rate / 20, Low = Prime / 2, High = Prime * 3;
+            private const int Prime = Rate * 8 / 100, Low = Prime / 2, High = Prime * 3; // 80 ms: survives a capture thread that a game delays by ~60 ms
             private bool primed;
             private int tick;
 
@@ -98,17 +114,74 @@ namespace GraphiteCompanion.Audio
             }
         }
 
+        /// <summary>
+        /// System sound capture with a 20 ms buffer. NAudio's WasapiLoopbackCapture uses 100 ms and reads it every
+        /// 50 ms - as long as the whole jitter reserve, so a capture thread delayed by a busy game left gaps.
+        /// </summary>
+        private sealed class LoopbackCapture : WasapiCapture
+        {
+            public LoopbackCapture(MMDevice device) : base(device, false, 20) { }
+            protected override AudioClientStreamFlags GetAudioClientStreamFlags() => AudioClientStreamFlags.Loopback;
+        }
+
+        /// <summary>
+        /// One ffmpeg stdin. Its own thread writes to it, so an ffmpeg that is slow for a moment (it runs below normal
+        /// priority next to a game) no longer blocks the mixer - which then had to throw sound away to catch up -
+        /// nor the other ffmpeg (replay buffer and manual recording share the stream).
+        /// </summary>
+        private sealed class Output
+        {
+            public readonly Stream Stream;
+            private readonly System.Collections.Concurrent.BlockingCollection<byte[]> queue = new(boundedCapacity: 600); // ~10 s
+            public volatile bool Dead;
+
+            public Output(Stream s)
+            {
+                Stream = s;
+                new Thread(Run) { IsBackground = true, Name = "RecordingAudio.Out", Priority = ThreadPriority.AboveNormal }.Start();
+            }
+
+            public void Post(byte[] data)
+            {
+                if (Dead || queue.IsAddingCompleted) return;
+                if (!queue.TryAdd(data)) Dead = true; // ffmpeg hung for 10 s: give up on it
+            }
+
+            public void Close() { try { queue.CompleteAdding(); } catch { } }
+
+            private void Run()
+            {
+                try
+                {
+                    foreach (var d in queue.GetConsumingEnumerable())
+                    {
+                        Stream.Write(d, 0, d.Length);
+                        Stream.Flush();
+                    }
+                }
+                catch { Dead = true; } // ffmpeg exited
+            }
+        }
+
         private readonly List<Source> sources = new();
-        private readonly List<Stream> outputs = new();
+        private readonly List<Output> outputs = new();
         private readonly Thread pump;
         private volatile bool running = true;
+
+        /// <summary>For tests: mix the given captures instead of the Windows devices.</summary>
+        public RecordingAudio(IEnumerable<IWaveIn> captures)
+        {
+            foreach (var c in captures) sources.Add(new Source(c, 1f));
+            pump = new Thread(Pump) { IsBackground = true, Name = "RecordingAudio", Priority = ThreadPriority.AboveNormal };
+            pump.Start();
+        }
 
         public RecordingAudio(bool systemSound, bool microphone)
         {
             var en = new MMDeviceEnumerator();
             if (systemSound)
             {
-                try { sources.Add(new Source(new WasapiLoopbackCapture(en.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia)), 1f)); }
+                try { sources.Add(new Source(new LoopbackCapture(en.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia)), 1f)); }
                 catch { }
             }
             if (microphone)
@@ -121,8 +194,16 @@ namespace GraphiteCompanion.Audio
         }
 
         /// <summary>ffmpeg stdin to feed; removed automatically when the process goes away.</summary>
-        public void AddOutput(Stream s) { lock (outputs) outputs.Add(s); }
-        public void RemoveOutput(Stream s) { lock (outputs) outputs.Remove(s); }
+        public void AddOutput(Stream s) { lock (outputs) outputs.Add(new Output(s)); }
+
+        public void RemoveOutput(Stream s)
+        {
+            lock (outputs)
+            {
+                foreach (var o in outputs.FindAll(o => o.Stream == s)) o.Close();
+                outputs.RemoveAll(o => o.Stream == s);
+            }
+        }
 
         private void Pump()
         {
@@ -144,12 +225,12 @@ namespace GraphiteCompanion.Audio
                     buf[i * 4 + 2] = (byte)R; buf[i * 4 + 3] = (byte)(R >> 8);
                 }
                 written += due;
-                Stream[] outs;
-                lock (outputs) outs = outputs.ToArray();
-                foreach (var o in outs)
+                var chunk = buf.AsSpan(0, (int)due * 4).ToArray();
+                lock (outputs)
                 {
-                    try { o.Write(buf, 0, (int)due * 4); o.Flush(); }
-                    catch { RemoveOutput(o); } // ffmpeg exited
+                    foreach (var o in outputs) o.Post(chunk);
+                    foreach (var o in outputs.FindAll(o => o.Dead)) o.Close();
+                    outputs.RemoveAll(o => o.Dead);
                 }
             }
         }
@@ -158,6 +239,7 @@ namespace GraphiteCompanion.Audio
         {
             running = false;
             pump.Join(500);
+            lock (outputs) { foreach (var o in outputs) o.Close(); outputs.Clear(); }
             foreach (var s in sources) s.Dispose();
             sources.Clear();
         }
