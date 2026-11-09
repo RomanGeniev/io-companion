@@ -48,7 +48,7 @@ namespace GraphiteCompanion
             visualTimer?.Stop();
             DisposeFun();
             recTimer?.Stop();
-            replay.Dispose();
+            foreach (var s in svcs.Values) s.Dispose();
             analyzer.Dispose();
             micMeter.Dispose();
         }

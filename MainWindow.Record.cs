@@ -20,14 +20,38 @@ namespace GraphiteCompanion
         [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
 
+        private delegate bool EnumProc(IntPtr h, IntPtr l);
+        [StructLayout(LayoutKind.Sequential)] private struct WinRect { public int L, T, R, B; }
+        [DllImport("user32.dll")] private static extern bool EnumWindows(EnumProc p, IntPtr l);
+        [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr h);
+        [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr h);
+        [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr h, out WinRect r);
+        [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr h, uint flags);
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] private static extern int GetWindowLongStyle(IntPtr h, int index);
+        [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int value, int size);
+
         private sealed class MonitorItem
         {
             public string Device = "";
+            public int Index;
             public string Label { get; init; } = "";
             public WF.Screen Screen = null!;
+            public IntPtr Handle;
         }
 
-        private readonly ReplayService replay = new();
+        private List<MonitorItem> monitors = new();
+        private readonly Dictionary<string, ReplayService> svcs = new();   // one recorder per monitor
+        private IEnumerable<MonitorItem> SelectedMonitors => monitors.Where(m => settings.RecordMonitors?.Contains(m.Device) == true);
+
+        private ReplayService Svc(MonitorItem m)
+        {
+            if (!svcs.TryGetValue(m.Device, out var s)) svcs[m.Device] = s = new ReplayService(m.Device.TrimStart('\\', '.'));
+            s.Tag = SelectedMonitors.Count() > 1 ? $"монитор {m.Index + 1}" : "";
+            return s;
+        }
+
+        private bool AnyRecording => svcs.Values.Any(s => s.Recording);
+        private bool AnyBuffer => svcs.Values.Any(s => s.BufferRunning);
         private DispatcherTimer? recTimer;
         private bool recBusy;
         private string replayKey = "Alt + F10", recordKey = "Alt + F9", shotKey = "Alt + F8";
@@ -46,13 +70,26 @@ namespace GraphiteCompanion
             Segments(QualityGrid, new[] { 0, 1, 2 }, q => q switch { 0 => "Низкое", 1 => "Среднее", _ => "Высокое" },
                      settings.RecordQuality, v => settings.RecordQuality = v);
 
-            var monitors = WF.Screen.AllScreens.Select((s, i) => new MonitorItem
+            monitors = WF.Screen.AllScreens.Select((s, i) => new MonitorItem
             {
-                Device = s.DeviceName, Screen = s,
+                Device = s.DeviceName, Screen = s, Index = i,
                 Label = $"Монитор {i + 1} · {s.Bounds.Width}×{s.Bounds.Height}" + (s.Primary ? " (основной)" : ""),
+                Handle = MonitorFromPoint(new System.Drawing.Point(s.Bounds.Left + s.Bounds.Width / 2, s.Bounds.Top + s.Bounds.Height / 2), 2),
             }).ToList();
-            MonitorCombo.ItemsSource = monitors;
-            MonitorCombo.SelectedItem = monitors.FirstOrDefault(m => m.Device == settings.RecordMonitor) ?? monitors.FirstOrDefault(m => m.Screen.Primary);
+            // older versions stored one monitor; now it is a list (at least one is always selected)
+            var sel = (settings.RecordMonitors ?? (settings.RecordMonitor != null ? new List<string> { settings.RecordMonitor } : new()))
+                .Where(d => monitors.Any(m => m.Device == d)).Distinct().ToList();
+            if (sel.Count == 0) sel.Add((monitors.FirstOrDefault(m => m.Screen.Primary) ?? monitors[0]).Device);
+            settings.RecordMonitors = sel;
+            MonitorPanel.Children.Clear();
+            foreach (var m in monitors)
+            {
+                var cb = new CheckBox { Content = m.Label, IsChecked = sel.Contains(m.Device), Tag = m };
+                cb.SetResourceReference(StyleProperty, "Switch");
+                cb.Click += MonitorCheck_Click;
+                MonitorPanel.Children.Add(cb);
+            }
+            UpdateMonitorHint();
             BuildResolutions();
 
             RecSystemSwitch.IsChecked = settings.RecordSystemSound;
@@ -91,25 +128,43 @@ namespace GraphiteCompanion
             }
         }
 
-        /// <summary>Resolution choices up to the selected monitor's own height.</summary>
+        private void MonitorCheck_Click(object sender, RoutedEventArgs e)
+        {
+            var cb = (CheckBox)sender;
+            var list = MonitorPanel.Children.OfType<CheckBox>().Where(c => c.IsChecked == true).Select(c => ((MonitorItem)c.Tag).Device).ToList();
+            if (list.Count == 0) { cb.IsChecked = true; list.Add(((MonitorItem)cb.Tag).Device); } // can't record nothing
+            settings.RecordMonitors = list;
+            UpdateMonitorHint();
+            BuildResolutions();
+            RecSettingsChanged();
+        }
+
+        private void UpdateMonitorHint()
+        {
+            MonitorHint.Text = SelectedMonitors.Count() > 1
+                ? "Каждый монитор пишется отдельным роликом. Папка игры берётся по окну на этом мониторе. Идущая запись продолжится на прежних мониторах."
+                : "Игра для папки определяется по окну на этом мониторе, а не по тому, где вы сейчас нажали клавишу.";
+        }
+
+        /// <summary>Resolution choices up to the selected monitor's own height (the smallest one when several are recorded).</summary>
         private void BuildResolutions()
         {
-            int native = (MonitorCombo.SelectedItem as MonitorItem)?.Screen.Bounds.Height ?? 1080;
+            var sel = SelectedMonitors.ToList();
+            int native = sel.Count > 0 ? sel.Min(m => m.Screen.Bounds.Height) : 1080;
             var heights = Heights.Where(h => h == 0 || h < native).ToArray();
             if (!heights.Contains(settings.RecordHeight)) settings.RecordHeight = 0;
             ResolutionGrid.Columns = heights.Length;
-            Segments(ResolutionGrid, heights, h => h == 0 ? $"Как на экране ({native}p)" : $"{h}p", settings.RecordHeight, v => settings.RecordHeight = v);
+            Segments(ResolutionGrid, heights, h => h == 0 ? (sel.Count > 1 ? "Как на экране" : $"Как на экране ({native}p)") : $"{h}p", settings.RecordHeight, v => settings.RecordHeight = v);
         }
 
-        private RecordOptions BuildOptions()
+        private RecordOptions BuildOptions(MonitorItem mon)
         {
-            var screen = (MonitorCombo.SelectedItem as MonitorItem)?.Screen ?? WF.Screen.PrimaryScreen!;
-            var b = screen.Bounds;
-            int h = settings.RecordHeight, w = 0;
+            var b = mon.Screen.Bounds;
+            int h = settings.RecordHeight >= b.Height ? 0 : settings.RecordHeight, w = 0;
             if (h > 0) w = (int)Math.Round(h * (double)b.Width / b.Height / 2) * 2;
             return new RecordOptions
             {
-                Monitor = MonitorFromPoint(new System.Drawing.Point(b.Left + b.Width / 2, b.Top + b.Height / 2), 2),
+                Monitor = mon.Handle,
                 Width = w, Height = h,
                 Fps = settings.RecordFps, Quality = settings.RecordQuality,
                 SystemSound = settings.RecordSystemSound, Microphone = settings.RecordMicrophone,
@@ -120,11 +175,6 @@ namespace GraphiteCompanion
         private void RecSetting_Changed(object sender, RoutedEventArgs e)
         {
             if (!initialized) return;
-            if (sender == MonitorCombo && MonitorCombo.SelectedItem is MonitorItem m)
-            {
-                settings.RecordMonitor = m.Device;
-                BuildResolutions();
-            }
             settings.RecordSystemSound = RecSystemSwitch.IsChecked == true;
             settings.RecordMicrophone = RecMicSwitch.IsChecked == true;
             RecSettingsChanged();
@@ -134,7 +184,7 @@ namespace GraphiteCompanion
         private void RecSettingsChanged()
         {
             ScheduleSave();
-            if (replay.BufferRunning) _ = StartReplayBuffer();
+            if (AnyBuffer) _ = StartReplayBuffer();
             UpdateRecStatus();
         }
 
@@ -155,10 +205,10 @@ namespace GraphiteCompanion
                     return false;
                 }
             }
-            if (replay.Codec == ReplayService.Encoder.None)
+            if (ReplayService.Detected == ReplayService.Encoder.None)
             {
                 RecStatus.Text = "Проверяю видеокарту…";
-                await replay.DetectEncoderAsync();
+                await ReplayService.DetectEncoderAsync();
             }
             return true;
         }
@@ -166,8 +216,14 @@ namespace GraphiteCompanion
         private async System.Threading.Tasks.Task StartReplayBuffer()
         {
             if (!await EnsureRecorderReady()) { ReplaySwitch.IsChecked = settings.ReplayEnabled = false; return; }
-            try { replay.StartBuffer(BuildOptions()); }
-            catch (Exception ex) { SettingsStore.LogError(ex); RecStatus.Text = "Не удалось запустить повторы: " + ex.Message; }
+            var sel = SelectedMonitors.ToList();
+            foreach (var kv in svcs.ToList())
+                if (sel.All(m => m.Device != kv.Key)) kv.Value.StopBuffer();   // monitor was unticked
+            foreach (var m in sel)
+            {
+                try { Svc(m).StartBuffer(BuildOptions(m)); }
+                catch (Exception ex) { SettingsStore.LogError(ex); RecStatus.Text = "Не удалось запустить повторы: " + ex.Message; }
+            }
             UpdateRecStatus();
         }
 
@@ -176,7 +232,7 @@ namespace GraphiteCompanion
             settings.ReplayEnabled = ReplaySwitch.IsChecked == true;
             ScheduleSave();
             if (settings.ReplayEnabled) await StartReplayBuffer();
-            else replay.StopBuffer();
+            else foreach (var s in svcs.Values) s.StopBuffer();
             UpdateRecStatus();
         }
 
@@ -190,86 +246,109 @@ namespace GraphiteCompanion
         };
         private static readonly string[] GenericNames = { "application", "launcher", "game", "unity player" };
         private readonly Dictionary<uint, string?> appNames = new();
-        private string? lastGame;                              // last real program that was in front (not IO Companion)
-        private string startGame = Desktop;
-        private readonly Dictionary<string, int> recSeconds = new();
+        private readonly Dictionary<string, string> startGame = new();                    // monitor → program at start
+        private readonly Dictionary<string, Dictionary<string, int>> recSeconds = new();  // monitor → program → seconds
 
-        /// <summary>(program name, whether the front window is IO Companion itself). Name is null for the desktop/taskbar.</summary>
-        private (string? name, bool self) ForegroundApp()
+        /// <summary>Friendly program name of a process; null for the shell/desktop and for IO Companion itself.</summary>
+        private string? AppName(uint pid)
+        {
+            if (pid == 0 || pid == Environment.ProcessId) return null;
+            if (appNames.TryGetValue(pid, out var cached)) return cached;
+            string? name = null;
+            try
+            {
+                using var p = Process.GetProcessById((int)pid);
+                if (!ShellApps.Any(s => s.Equals(p.ProcessName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    string? d = null;
+                    try { d = p.MainModule?.FileVersionInfo.FileDescription?.Trim(); } catch { } // protected / elevated games
+                    if (d != null && d.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) d = d[..^4];
+                    name = string.IsNullOrWhiteSpace(d) || GenericNames.Contains(d.ToLowerInvariant()) ? p.ProcessName : d;
+                }
+            }
+            catch { }
+            if (appNames.Count > 64) appNames.Clear();
+            appNames[pid] = name;
+            return name;
+        }
+
+        /// <summary>
+        /// The program shown on one monitor: the active window if it is on that monitor, otherwise the
+        /// top-most normal window there. So Discord in front on monitor 2 does not name a game recorded on monitor 1.
+        /// </summary>
+        private string GameOn(MonitorItem m)
         {
             try
             {
-                GetWindowThreadProcessId(GetForegroundWindow(), out uint pid);
-                if (pid == 0) return (null, false);
-                if (pid == Environment.ProcessId) return (null, true);
-                if (appNames.TryGetValue(pid, out var cached)) return (cached, false);
-                string? name = null;
-                using (var p = Process.GetProcessById((int)pid))
+                var fg = GetForegroundWindow();
+                if (fg != IntPtr.Zero && MonitorFromWindow(fg, 2) == m.Handle && IsAppWindow(fg))
                 {
-                    if (!ShellApps.Any(s => s.Equals(p.ProcessName, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        string? d = null;
-                        try { d = p.MainModule?.FileVersionInfo.FileDescription?.Trim(); } catch { } // protected / elevated games
-                        if (d != null && d.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) d = d[..^4];
-                        name = string.IsNullOrWhiteSpace(d) || GenericNames.Contains(d.ToLowerInvariant()) ? p.ProcessName : d;
-                    }
+                    GetWindowThreadProcessId(fg, out uint fpid);
+                    var n = AppName(fpid);
+                    if (n != null) return n;
                 }
-                if (appNames.Count > 64) appNames.Clear();
-                appNames[pid] = name;
-                return (name, false);
+                string? found = null;
+                EnumWindows((h, _) =>   // top of the z-order first
+                {
+                    if (!IsAppWindow(h) || MonitorFromWindow(h, 2) != m.Handle) return true;
+                    GetWindowThreadProcessId(h, out uint pid);
+                    found = AppName(pid);
+                    return found == null;   // skip shell / own windows, keep looking
+                }, IntPtr.Zero);
+                return found ?? Desktop;
             }
-            catch { return (null, false); }
+            catch { return Desktop; }
         }
 
-        /// <summary>The program a new file belongs to. Pressed from IO Companion itself → the program used just before.</summary>
-        private string CurrentGame()
+        /// <summary>A visible, not minimised, not hidden (cloaked) window of normal size; overlays and tool windows are skipped.</summary>
+        private static bool IsAppWindow(IntPtr h)
         {
-            var (name, self) = ForegroundApp();
-            if (name != null) return name;
-            return self && lastGame != null ? lastGame : Desktop;
+            if (!IsWindowVisible(h) || IsIconic(h)) return false;
+            if (DwmGetWindowAttribute(h, 14 /* DWMWA_CLOAKED */, out int cloaked, 4) == 0 && cloaked != 0) return false;
+            int ex = GetWindowLongStyle(h, -20 /* GWL_EXSTYLE */);
+            if ((ex & 0x80 /* TOOLWINDOW */) != 0 || (ex & 0x20 /* TRANSPARENT */) != 0 || (ex & 0x08000000 /* NOACTIVATE */) != 0) return false;
+            if (!GetWindowRect(h, out var r)) return false;
+            return r.R - r.L >= 300 && r.B - r.T >= 200;
         }
 
-        /// <summary>Once a second: remember the last program and count how long each one was in front during a recording.</summary>
+        /// <summary>Once a second while recording: count how long each program was shown on each recorded monitor.</summary>
         private void TrackForeground()
         {
-            var (name, _) = ForegroundApp();
-            if (name == null) return;
-            lastGame = name;
-            if (replay.Recording) recSeconds[name] = recSeconds.GetValueOrDefault(name) + 1;
+            foreach (var m in monitors)
+            {
+                if (!svcs.TryGetValue(m.Device, out var s) || !s.Recording) continue;
+                if (!recSeconds.TryGetValue(m.Device, out var counts)) recSeconds[m.Device] = counts = new();
+                string name = GameOn(m);
+                if (name != Desktop) counts[name] = counts.GetValueOrDefault(name) + 1;
+            }
         }
 
         /// <summary>
         /// Alt-Tab does not interrupt a recording (it captures the whole monitor) and never splits the file.
-        /// The folder is the program the recording was started in; if it was started on the desktop or in a
-        /// launcher-less moment, the program that was in front the longest.
+        /// The folder is the program the recording was started in on that monitor; if it was started on the
+        /// desktop, the program that was shown there the longest.
         /// </summary>
-        private string GameForRecording()
+        private string GameForRecording(string device)
         {
-            if (startGame != Desktop || recSeconds.Count == 0) return startGame;
-            return recSeconds.MaxBy(kv => kv.Value).Key;
+            string start = startGame.GetValueOrDefault(device, Desktop);
+            if (start != Desktop || !recSeconds.TryGetValue(device, out var c) || c.Count == 0) return start;
+            return c.MaxBy(kv => kv.Value).Key;
         }
 
         private bool shotBusy;
 
+        /// <summary>One PNG per selected monitor, each in the folder of the program shown on it.</summary>
         public async System.Threading.Tasks.Task TakeScreenshot()
         {
             if (shotBusy) return;
             shotBusy = true;
             try
             {
-                var o = BuildOptions();
-                var bounds = (MonitorCombo.SelectedItem as MonitorItem)?.Screen.Bounds ?? WF.Screen.PrimaryScreen!.Bounds;
-                var hwnd = GetForegroundWindow();
-                GetWindowThreadProcessId(hwnd, out uint pid);
-                if (hwnd != IntPtr.Zero && pid != Environment.ProcessId)
-                {
-                    // the monitor the game is on, not necessarily the one selected for recording
-                    var screen = WF.Screen.FromHandle(hwnd);
-                    bounds = screen.Bounds;
-                    o.Monitor = MonitorFromPoint(new System.Drawing.Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2), 2);
-                }
-                string file = await replay.ScreenshotAsync(o, CurrentGame(), bounds);
-                NotifyChange("Скриншот сохранён", "", Path.GetFileName(file));
+                var saved = new List<string>();
+                foreach (var m in SelectedMonitors.ToList())
+                    saved.Add(await Svc(m).ScreenshotAsync(BuildOptions(m), GameOn(m), m.Screen.Bounds));
+                NotifyChange(saved.Count > 1 ? $"Скриншоты сохранены ({saved.Count})" : "Скриншот сохранён", "",
+                             string.Join(", ", saved.Select(Path.GetFileName)));
             }
             catch (Exception ex)
             {
@@ -284,22 +363,25 @@ namespace GraphiteCompanion
         public async System.Threading.Tasks.Task SaveReplay()
         {
             if (recBusy) return;
-            if (!replay.BufferRunning)
+            if (!AnyBuffer)
             {
-                NotifyChange("Повторы выключены", "", "Включите их на вкладке «Запись»");
+                NotifyChange("Повторы выключены", "", "Включите их на вкладке «Запись»");
                 return;
             }
             recBusy = true;
             SaveReplayText.Text = "Сохраняю…";
             try
             {
-                string file = await replay.SaveReplayAsync(CurrentGame());
-                NotifyChange("Повтор сохранён", "", Path.GetFileName(file));
+                var jobs = monitors.Where(m => svcs.TryGetValue(m.Device, out var s) && s.BufferRunning)
+                                   .Select(m => svcs[m.Device].SaveReplayAsync(GameOn(m))).ToList();
+                var files = await System.Threading.Tasks.Task.WhenAll(jobs);
+                NotifyChange(files.Length > 1 ? $"Повторы сохранены ({files.Length})" : "Повтор сохранён", "",
+                             string.Join(", ", files.Select(Path.GetFileName)));
             }
             catch (Exception ex)
             {
                 SettingsStore.LogError(ex);
-                NotifyChange("Не удалось сохранить повтор", "", ex.Message);
+                NotifyChange("Не удалось сохранить повтор", "", ex.Message);
             }
             finally
             {
@@ -315,25 +397,43 @@ namespace GraphiteCompanion
             recBusy = true;
             try
             {
-                if (replay.Recording)
+                if (AnyRecording)
                 {
                     RecordText.Text = "Сохраняю…";
-                    string? file = await replay.StopRecordingAsync(GameForRecording());
-                    NotifyChange("Запись сохранена", "", file != null ? Path.GetFileName(file) : null);
+                    var jobs = svcs.Where(kv => kv.Value.Recording)
+                                   .Select(kv => kv.Value.StopRecordingAsync(GameForRecording(kv.Key))).ToList();
+                    var files = (await System.Threading.Tasks.Task.WhenAll(jobs)).Where(f => f != null).ToList();
+                    NotifyChange(files.Count > 1 ? $"Записи сохранены ({files.Count})" : "Запись сохранена", "",
+                                 files.Count > 0 ? string.Join(", ", files.Select(Path.GetFileName)) : null);
                 }
                 else
                 {
                     if (!await EnsureRecorderReady()) return;
-                    startGame = CurrentGame();
+                    startGame.Clear();
                     recSeconds.Clear();
-                    replay.StartRecording(BuildOptions(), startGame);
-                    NotifyChange("Запись началась", "", $"{recordKey} — остановить");
+                    var started = new List<MonitorItem>();
+                    try
+                    {
+                        foreach (var m in SelectedMonitors.ToList())
+                        {
+                            startGame[m.Device] = GameOn(m);
+                            Svc(m).StartRecording(BuildOptions(m), startGame[m.Device]);
+                            started.Add(m);
+                        }
+                    }
+                    catch
+                    {
+                        // one monitor failed: do not leave the others recording on their own
+                        foreach (var m in started) _ = svcs[m.Device].StopRecordingAsync(startGame[m.Device]);
+                        throw;
+                    }
+                    NotifyChange("Запись началась", "", (started.Count > 1 ? $"мониторов: {started.Count} · " : "") + $"{recordKey} — остановить");
                 }
             }
             catch (Exception ex)
             {
                 SettingsStore.LogError(ex);
-                NotifyChange("Ошибка записи", "", ex.Message);
+                NotifyChange("Ошибка записи", "", ex.Message);
             }
             finally
             {
@@ -360,29 +460,32 @@ namespace GraphiteCompanion
             RecSettingsChanged();
         }
 
-        public bool RecordingActive => replay.Recording;
-        public bool ReplayActive => replay.BufferRunning;
+        public bool RecordingActive => AnyRecording;
+        public bool ReplayActive => AnyBuffer;
 
         private void UpdateRecStatus()
         {
             if (RecStatus == null || recBusy && RecStatus.Text.StartsWith("Скачиваю")) return;
-            string enc = replay.Codec == ReplayService.Encoder.None ? "" : " · кодирует " + ReplayService.EncoderName(replay.Codec);
-            if (replay.Recording)
+            var codec = ReplayService.Detected;
+            string enc = codec == ReplayService.Encoder.None ? "" : " · кодирует " + ReplayService.EncoderName(codec);
+            var rec = svcs.Values.Where(s => s.Recording).ToList();
+            if (rec.Count > 0)
             {
-                var t = DateTime.Now - replay.RecordingSince;
+                var t = DateTime.Now - rec.Min(s => s.RecordingSince);
                 RecordText.Text = $"Остановить  {(int)t.TotalMinutes:00}:{t.Seconds:00}";
             }
             else if (!recBusy) RecordText.Text = "Начать запись";
 
-            if (replay.BufferRunning)
-                RecStatus.Text = $"Повторы включены: держу последние {DurationText(settings.ReplaySeconds)}{enc}. " +
-                                 $"Временный буфер на диске: {ReplayService.BufferBytes() / (1024 * 1024)} МБ.";
+            int buffers = svcs.Values.Count(s => s.BufferRunning);
+            if (buffers > 0)
+                RecStatus.Text = $"Повторы включены{(buffers > 1 ? $" на {buffers} мониторах" : "")}: держу последние {DurationText(settings.ReplaySeconds)}{enc}. " +
+                                 $"Временный буфер на диске: {svcs.Values.Sum(s => s.BufferBytes()) / (1024 * 1024)} МБ.";
             else if (settings.ReplayEnabled && !FfmpegInstaller.Installed)
                 RecStatus.Text = "Включите переключатель — программа один раз скачает движок записи.";
             else if (!recBusy)
                 RecStatus.Text = "Повторы выключены. Включите — и любой момент последних секунд можно сохранить одной клавишей." +
                                  (enc.Length > 0 ? enc : "");
-            SaveReplayButton.IsEnabled = replay.BufferRunning && !recBusy;
+            SaveReplayButton.IsEnabled = buffers > 0 && !recBusy;
 
             RecInfo.Text = (FfmpegInstaller.Installed ? "" : "При первом включении скачается FFmpeg (~110 МБ) — открытый движок записи, как в OBS. ") +
                            "Видеокарта сама сжимает видео (NVIDIA / AMD / Intel), поэтому игра почти не проседает. " +

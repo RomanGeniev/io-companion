@@ -792,7 +792,8 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource CardTitle}" Text="МОНИТОР"/>
-                                    <ComboBox x:Name="MonitorCombo" DisplayMemberPath="Label" SelectionChanged="RecSetting_Changed"/>
+                                    <StackPanel x:Name="MonitorPanel"/>
+                                    <TextBlock x:Name="MonitorHint" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Style="{StaticResource CardTitle}" Text="ЗВУК"/>

@@ -83,7 +83,8 @@ namespace GraphiteCompanion.Services
         public int RecordHeight { get; set; }          // 0 = as on screen, else 2160/1440/1080/720
         public int RecordFps { get; set; } = 60;
         public int RecordQuality { get; set; } = 1;    // 0 low, 1 medium, 2 high
-        public string? RecordMonitor { get; set; }     // Screen.DeviceName, null = primary
+        public string? RecordMonitor { get; set; }     // legacy single monitor, migrated to RecordMonitors
+        public List<string>? RecordMonitors { get; set; } // Screen.DeviceName of every monitor to record, null = primary only
         public bool RecordSystemSound { get; set; } = true;
         public bool RecordMicrophone { get; set; }
 
