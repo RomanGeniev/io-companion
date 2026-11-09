@@ -427,12 +427,32 @@ namespace GraphiteCompanion
             return FactoryBands();
         }
 
+        private string? draftCopy; // auto-created copy that keeps following the edit in progress
+
         private void StoreCurrentBands()
         {
             var custom = ActiveCustom;
             if (custom != null)
             {
-                custom.Bands = (int[])bands.Clone();
+                if (custom.Name == draftCopy) { custom.Bands = (int[])bands.Clone(); return; }
+                if (bands.SequenceEqual(custom.Bands)) return;
+                // saved presets are never overwritten: any change goes into a new copy
+                string baseName = custom.Name, name = baseName + " (копия)";
+                for (int n = 2; settings.Custom.Any(c => c.Name == name); n++) name = $"{baseName} (копия {n})";
+                settings.Custom.Add(new CustomPreset
+                {
+                    Name = name, Bands = (int[])bands.Clone(),
+                    Effects = custom.Effects == null ? null : new Dictionary<string, int>(custom.Effects),
+                });
+                settings.ActiveCustom = name;
+                draftCopy = name;
+                bool was = suppress;
+                suppress = true;
+                RefreshCustomList();
+                CustomList.SelectedItem = name;
+                DeleteCustomButton.IsEnabled = true;
+                suppress = was;
+                NotifyChange("Новый пресет «" + name + "»", "", $"«{baseName}» не изменён");
                 return;
             }
             if (bands.SequenceEqual(FactoryBands()))
@@ -443,6 +463,7 @@ namespace GraphiteCompanion
 
         private void LoadPresetToUi()
         {
+            draftCopy = null;
             var src = CurrentPresetBands();
             suppress = true;
             for (int i = 0; i < EqBands.Count; i++)
