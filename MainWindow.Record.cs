@@ -473,7 +473,7 @@ namespace GraphiteCompanion
         private readonly Dictionary<string, string> startGame = new();                    // monitor → program at start
         private readonly Dictionary<string, Dictionary<string, int>> recSeconds = new();  // monitor → program → seconds
 
-        /// <summary>Friendly program name of a process; null for the shell/desktop and for IO Companion itself.</summary>
+        /// <summary>Friendly program name of a process; null for the shell/desktop and for SoundShot itself.</summary>
         private string? AppName(uint pid)
         {
             if (pid == 0 || pid == Environment.ProcessId) return null;

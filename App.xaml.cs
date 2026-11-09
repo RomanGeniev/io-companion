@@ -25,7 +25,7 @@ namespace GraphiteCompanion
                 SettingsStore.LogError(args.Exception);
                 MessageBox.Show("Произошла ошибка: " + args.Exception.Message +
                                 "\n\nПодробности записаны в %APPDATA%\\GraphiteCompanion\\error.log",
-                                "IO Companion", MessageBoxButton.OK, MessageBoxImage.Warning);
+                                "SoundShot", MessageBoxButton.OK, MessageBoxImage.Warning);
                 args.Handled = true;
             };
 

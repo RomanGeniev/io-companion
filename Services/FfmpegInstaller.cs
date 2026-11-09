@@ -31,7 +31,7 @@ namespace GraphiteCompanion.Services
             string zip = Path.Combine(Folder, "download.zip");
             using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(15) })
             {
-                http.DefaultRequestHeaders.UserAgent.ParseAdd("IO-Companion");
+                http.DefaultRequestHeaders.UserAgent.ParseAdd("SoundShot");
                 using var response = await http.GetAsync(Url, HttpCompletionOption.ResponseHeadersRead);
                 response.EnsureSuccessStatusCode();
                 long total = response.Content.Headers.ContentLength ?? -1, done = 0;

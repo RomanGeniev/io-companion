@@ -77,7 +77,7 @@ namespace GraphiteCompanion
             if (nrBusy) return;
             if (nrStep == NrStep.Reboot)
             {
-                if (MessageBox.Show(this, "Перезагрузить компьютер сейчас? Сохраните открытые документы.", "IO Companion",
+                if (MessageBox.Show(this, "Перезагрузить компьютер сейчас? Сохраните открытые документы.", "SoundShot",
                         MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                     EqApoInstaller.Reboot();
                 return;

@@ -10,7 +10,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>GraphiteCompanion</AssemblyName>
     <RootNamespace>GraphiteCompanion</RootNamespace>
-    <Product>IO Companion</Product>
+    <Product>SoundShot</Product>
     <Version>2.1.0</Version>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <NoWarn>$(NoWarn);WPF0001</NoWarn>

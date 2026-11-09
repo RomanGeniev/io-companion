@@ -1,7 +1,7 @@
 ﻿<Window x:Class="GraphiteCompanion.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="IO Companion"
+        Title="SoundShot"
         Width="1160" Height="800" MinWidth="1000" MinHeight="680"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource BgBrush}"
@@ -27,7 +27,7 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="IO Companion" FontSize="17" FontWeight="SemiBold"/>
+                        <TextBlock Text="SoundShot" FontSize="17" FontWeight="SemiBold"/>
                         <TextBlock x:Name="BrandSubtitle" Text="Наушники IO" FontSize="11" Foreground="{DynamicResource SubTextBrush}"
                                    TextTrimming="CharacterEllipsis" MaxWidth="230"/>
                     </StackPanel>
@@ -215,7 +215,7 @@
                                   ToolTip="Вместо уведомлений Windows — короткая надпись по центру экрана"/>
                         <CheckBox x:Name="MicSoundsSwitch" Style="{StaticResource Switch}" Content="Звук при выключении микрофона" Click="MicSoundsSwitch_Click"/>
                         <CheckBox x:Name="DiscordSwitch" Style="{StaticResource Switch}" Content="Статус в Discord" Click="DiscordSwitch_Click"
-                                  ToolTip="В профиле Discord видно «IO Companion · Игры»"/>
+                                  ToolTip="В профиле Discord видно «SoundShot · Игры»"/>
                         <StackPanel x:Name="DiscordSetup" Visibility="Collapsed" Margin="0,2,0,6">
                             <TextBlock FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"
                                        Text="Application ID приложения Discord (discord.com/developers → New Application → скопировать Application ID):"/>
@@ -419,7 +419,7 @@
                                                    Text="Эквалайзер для любых наушников"/>
                                         <TextBlock x:Name="ApoText" Margin="0,6,0,12" TextAlignment="Center" TextWrapping="Wrap" FontSize="12"
                                                    Foreground="{DynamicResource SubTextBrush}"
-                                                   Text="IO Companion поставит бесплатный Equalizer APO и будет управлять им сам. В его окне один раз отметьте свои наушники, потом перезагрузите компьютер."/>
+                                                   Text="SoundShot поставит бесплатный Equalizer APO и будет управлять им сам. В его окне один раз отметьте свои наушники, потом перезагрузите компьютер."/>
                                         <Button x:Name="ApoButton" Style="{StaticResource AccentButton}" HorizontalAlignment="Center" MinWidth="220" Click="ApoButton_Click">
                                             <TextBlock x:Name="ApoButtonText" Text="Включить эквалайзер"/>
                                         </Button>

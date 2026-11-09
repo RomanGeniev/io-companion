@@ -96,7 +96,7 @@ namespace GraphiteCompanion
             }
             else if (!IsActive)
             {
-                tray.Notify("IO Companion", text);
+                tray.Notify("SoundShot", text);
             }
         }
 
@@ -660,7 +660,7 @@ namespace GraphiteCompanion
             {
                 SettingsStore.LogError(ex);
                 MonitorSwitch.IsChecked = false;
-                MessageBox.Show("Не удалось включить прослушивание: " + ex.Message, "IO Companion");
+                MessageBox.Show("Не удалось включить прослушивание: " + ex.Message, "SoundShot");
             }
         }
 
@@ -677,13 +677,13 @@ namespace GraphiteCompanion
         {
             if (settings.Custom.Count == 0)
             {
-                MessageBox.Show("Сначала сохраните хотя бы один свой пресет.", "IO Companion");
+                MessageBox.Show("Сначала сохраните хотя бы один свой пресет.", "SoundShot");
                 return;
             }
             var dlg = new Microsoft.Win32.SaveFileDialog
             {
                 FileName = "IO пресеты.json",
-                Filter = "Пресеты IO Companion|*.json",
+                Filter = "Пресеты SoundShot|*.json",
             };
             if (dlg.ShowDialog(this) != true) return;
             try
@@ -693,13 +693,13 @@ namespace GraphiteCompanion
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Не удалось сохранить: " + ex.Message, "IO Companion");
+                MessageBox.Show("Не удалось сохранить: " + ex.Message, "SoundShot");
             }
         }
 
         private void ImportPresets_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "Пресеты IO Companion|*.json|Все файлы|*.*" };
+            var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "Пресеты SoundShot|*.json|Все файлы|*.*" };
             if (dlg.ShowDialog(this) != true) return;
             try
             {
@@ -707,7 +707,7 @@ namespace GraphiteCompanion
                 var presets = file?.Presets?.Where(p => !string.IsNullOrWhiteSpace(p.Name) && p.Bands?.Length == EqBands.Count).ToList();
                 if (presets == null || presets.Count == 0)
                 {
-                    MessageBox.Show("В файле нет пресетов IO Companion.", "IO Companion");
+                    MessageBox.Show("В файле нет пресетов SoundShot.", "SoundShot");
                     return;
                 }
                 foreach (var p in presets)
@@ -718,11 +718,11 @@ namespace GraphiteCompanion
                 }
                 RefreshCustomList();
                 ScheduleSave();
-                MessageBox.Show($"Импортировано пресетов: {presets.Count}", "IO Companion");
+                MessageBox.Show($"Импортировано пресетов: {presets.Count}", "SoundShot");
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Не удалось прочитать файл: " + ex.Message, "IO Companion");
+                MessageBox.Show("Не удалось прочитать файл: " + ex.Message, "SoundShot");
             }
         }
 

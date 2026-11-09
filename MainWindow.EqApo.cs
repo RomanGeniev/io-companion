@@ -29,7 +29,7 @@ namespace GraphiteCompanion
             {
                 apoStep = ApoStep.Install;
                 ApoTitle.Text = "Эквалайзер для любых наушников";
-                ApoText.Text = "IO Companion поставит бесплатный Equalizer APO и будет управлять им сам. " +
+                ApoText.Text = "SoundShot поставит бесплатный Equalizer APO и будет управлять им сам. " +
                                "В его окне один раз отметьте свои наушники, потом перезагрузите компьютер.";
                 ApoButtonText.Text = "Включить эквалайзер";
             }
@@ -56,7 +56,7 @@ namespace GraphiteCompanion
             if (apoBusy) return;
             if (apoStep == ApoStep.Reboot)
             {
-                if (MessageBox.Show(this, "Перезагрузить компьютер сейчас? Сохраните открытые документы.", "IO Companion",
+                if (MessageBox.Show(this, "Перезагрузить компьютер сейчас? Сохраните открытые документы.", "SoundShot",
                         MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                     EqApoInstaller.Reboot();
                 return;
@@ -88,7 +88,7 @@ namespace GraphiteCompanion
                 {
                     apoStep = ApoStep.Reboot;
                     ApoTitle.Text = "Почти готово — осталось перезагрузить компьютер";
-                    ApoText.Text = "Windows подключит эквалайзер к наушникам после перезагрузки. После неё IO Companion сразу начнёт им управлять.";
+                    ApoText.Text = "Windows подключит эквалайзер к наушникам после перезагрузки. После неё SoundShot сразу начнёт им управлять.";
                     ApoButtonText.Text = "Перезагрузить";
                 }
                 else

@@ -809,7 +809,7 @@ namespace GraphiteCompanion
                 Hide();
                 if (!trayHintShown)
                 {
-                    tray.Notify("IO Companion работает в трее",
+                    tray.Notify("SoundShot работает в трее",
                                 "Пресеты переключаются горячими клавишами. Выход — правый клик по значку.");
                     trayHintShown = true;
                 }
@@ -890,7 +890,7 @@ namespace GraphiteCompanion
         private void DeleteCustom_Click(object sender, RoutedEventArgs e)
         {
             if (CustomList.SelectedItem is not string name) return;
-            if (MessageBox.Show($"Удалить пресет «{name}»?", "IO Companion",
+            if (MessageBox.Show($"Удалить пресет «{name}»?", "SoundShot",
                                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             settings.Custom.RemoveAll(c => c.Name == name);
             if (settings.ActiveCustom == name) settings.ActiveCustom = null;

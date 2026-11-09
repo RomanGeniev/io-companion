@@ -20,7 +20,7 @@ namespace GraphiteCompanion.Services
     public static class UpdateService
     {
         /// <summary>GitHub repository "owner/name" with the releases. Can be overridden by update-repo.txt next to the exe.</summary>
-        public const string DefaultRepo = "RomanGeniev/io-companion";
+        public const string DefaultRepo = "RomanGeniev/soundshot";
 
         public static string Repo
         {
@@ -46,7 +46,7 @@ namespace GraphiteCompanion.Services
         private static HttpClient Client()
         {
             var c = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-            c.DefaultRequestHeaders.UserAgent.ParseAdd("IO-Companion-Updater");
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("SoundShot-Updater");
             c.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
             return c;
         }

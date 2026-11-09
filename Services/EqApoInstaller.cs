@@ -14,7 +14,7 @@ namespace GraphiteCompanion.Services
     /// Installs Equalizer APO (GPL, https://sourceforge.net/projects/equalizerapo/) from its official
     /// SourceForge release. The download is verified by SHA-256 before anything is run.
     /// During setup Equalizer APO's own Device Selector opens - the user ticks their headphones there.
-    /// Afterwards the "Users" group gets write access to the config folder so IO Companion can control it.
+    /// Afterwards the "Users" group gets write access to the config folder so SoundShot can control it.
     /// </summary>
     public static class EqApoInstaller
     {
@@ -30,7 +30,7 @@ namespace GraphiteCompanion.Services
             if (File.Exists(target) && HashOf(target) == Sha256) return target;
 
             using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("IO-Companion");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("SoundShot");
             using var response = await http.GetAsync(Url, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
             long total = response.Content.Headers.ContentLength ?? -1, done = 0;
@@ -115,7 +115,7 @@ namespace GraphiteCompanion.Services
 
             using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) })
             {
-                http.DefaultRequestHeaders.UserAgent.ParseAdd("IO-Companion");
+                http.DefaultRequestHeaders.UserAgent.ParseAdd("SoundShot");
                 using var response = await http.GetAsync(RnnoiseUrl, HttpCompletionOption.ResponseHeadersRead);
                 response.EnsureSuccessStatusCode();
                 long total = response.Content.Headers.ContentLength ?? -1, done = 0;
@@ -145,7 +145,7 @@ namespace GraphiteCompanion.Services
         }
 
         public static void Reboot() =>
-            Process.Start(new ProcessStartInfo("shutdown.exe", "/r /t 5 /c \"IO Companion: перезагрузка для включения эквалайзера\"")
+            Process.Start(new ProcessStartInfo("shutdown.exe", "/r /t 5 /c \"SoundShot: перезагрузка для включения эквалайзера\"")
             { CreateNoWindow = true, UseShellExecute = false });
 
         private static async Task<bool> RunElevatedAsync(string script)

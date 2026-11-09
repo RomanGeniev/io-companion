@@ -37,7 +37,7 @@ namespace GraphiteCompanion.Services
         private static HttpClient Client()
         {
             var c = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-            c.DefaultRequestHeaders.UserAgent.ParseAdd("IO-Companion");
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("SoundShot");
             return c;
         }
 

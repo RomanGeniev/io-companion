@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 namespace GraphiteCompanion.Services
 {
     /// <summary>
-    /// Shows "IO Companion · Игры" in the Discord profile via Discord's local RPC pipe
+    /// Shows "SoundShot · Игры" in the Discord profile via Discord's local RPC pipe
     /// (\\.\pipe\discord-ipc-N). Needs an Application ID from discord.com/developers;
     /// nothing is sent anywhere except to the Discord app running on this PC.
     /// </summary>
@@ -44,7 +44,7 @@ namespace GraphiteCompanion.Services
                             details,
                             state,
                             timestamps = new { start = startedAt },
-                            assets = new { large_image = "logo", large_text = "IO Companion" },
+                            assets = new { large_image = "logo", large_text = "SoundShot" },
                         },
                     },
                 };

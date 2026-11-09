@@ -124,7 +124,7 @@ namespace GraphiteCompanion.Services
                 RedirectStandardInput = true, RedirectStandardError = true, RedirectStandardOutput = true,
             };
             var p = Process.Start(psi)!;
-            job.Add(p); // ffmpeg dies together with IO Companion, even on a crash
+            job.Add(p); // ffmpeg dies together with SoundShot, even on a crash
             try { p.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
             string log = Path.Combine(SettingsStore.Folder, logName);
             p.ErrorDataReceived += (_, e) => { if (e.Data != null) { LastError = e.Data; try { File.AppendAllText(log, e.Data + "\n"); } catch { } } };
@@ -323,7 +323,7 @@ namespace GraphiteCompanion.Services
         }
     }
 
-    /// <summary>Windows job object: child processes are killed when IO Companion exits for any reason.</summary>
+    /// <summary>Windows job object: child processes are killed when SoundShot exits for any reason.</summary>
     internal sealed class JobObject : IDisposable
     {
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr CreateJobObject(IntPtr a, string? name);

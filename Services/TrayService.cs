@@ -67,7 +67,7 @@ namespace GraphiteCompanion.Services
             icon = new WF.NotifyIcon
             {
                 Icon = appIcon,
-                Text = "IO Companion",
+                Text = "SoundShot",
                 ContextMenuStrip = menu,
                 Visible = true,
             };
@@ -80,7 +80,7 @@ namespace GraphiteCompanion.Services
             for (int i = 0; i < modeItems.Length; i++) modeItems[i].Checked = mode.HasValue && (int)mode.Value == i;
             for (int i = 0; i < padItems.Length; i++) padItems[i].Checked = (int)pad == i;
             eqItem.Checked = eqEnabled;
-            string text = $"IO Companion\n{presetTitle}" + (eqEnabled ? "" : " (EQ выкл.)");
+            string text = $"SoundShot\n{presetTitle}" + (eqEnabled ? "" : " (EQ выкл.)");
             icon.Text = text.Length > 127 ? text[..127] : text;
         }
 
