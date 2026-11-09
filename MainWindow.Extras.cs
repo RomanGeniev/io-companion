@@ -534,7 +534,6 @@ namespace GraphiteCompanion
 
         public void SetVolumeFromOutside(int percent)
         {
-            percent = ClampToLimit(percent);
             try { session?.SetVolume(percent / 100f); } catch { }
             suppressVolume = true;
             VolumeSlider.Value = percent;

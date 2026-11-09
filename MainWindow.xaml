@@ -78,15 +78,6 @@
                             <TextBlock x:Name="VolumeText" Grid.Column="2" Text="—" Width="40" TextAlignment="Right"
                                        VerticalAlignment="Center" FontWeight="SemiBold"/>
                         </Grid>
-                        <CheckBox x:Name="LimitSwitch" Style="{StaticResource Switch}" Margin="0,14,0,0" Click="LimitSwitch_Click"
-                                  ToolTip="Громкость не поднимется выше заданного уровня — бережёт слух">
-                            <TextBlock>
-                                <Run Text="Ограничить громкость"/>
-                                <Run x:Name="LimitValueText" Text="80%" Foreground="{DynamicResource AccentBrush}" FontWeight="SemiBold"/>
-                            </TextBlock>
-                        </CheckBox>
-                        <Slider x:Name="LimitSlider" Style="{StaticResource VolumeSlider}" Minimum="20" Maximum="100" Margin="0,6,0,0"
-                                SmallChange="5" LargeChange="5" TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="LimitSlider_ValueChanged"/>
                     </StackPanel>
                 </Border>
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -21,15 +21,10 @@ namespace GraphiteCompanion
         private readonly Path spectrumPath = new() { IsHitTestVisible = false };
         private DispatcherTimer? visualTimer;
         private double micShownDb = -90;
-        private DateTime lastLimitNotice = DateTime.MinValue;
 
         private void InitFeatures()
         {
             AnalyzerSwitch.IsChecked = settings.Analyzer;
-            LimitSwitch.IsChecked = settings.VolumeLimitEnabled;
-            LimitSlider.Value = settings.VolumeLimit;
-            LimitSlider.IsEnabled = settings.VolumeLimitEnabled;
-            LimitValueText.Text = $"{settings.VolumeLimit}%";
 
             spectrumPath.SetResourceReference(Shape.FillProperty, "SpectrumBrush");
             curveCanvas.Children.Insert(0, spectrumPath);
@@ -183,48 +178,13 @@ namespace GraphiteCompanion
             ScheduleSave();
         }
 
-        // ===================== Volume limit =====================
-
-        private int ClampToLimit(int percent) =>
-            settings.VolumeLimitEnabled ? Math.Min(percent, settings.VolumeLimit) : percent;
-
-        /// <summary>Called from polling: the volume wheel on the headset can't exceed the limit either.</summary>
-        private void EnforceLimit(float currentVolume)
-        {
-            if (!settings.VolumeLimitEnabled || session == null) return;
-            if (currentVolume * 100 <= settings.VolumeLimit + 0.5) return;
-            try { session.SetVolume(settings.VolumeLimit / 100f); } catch { }
-            if ((DateTime.Now - lastLimitNotice).TotalSeconds > 4)
-            {
-                lastLimitNotice = DateTime.Now;
-                NotifyChange($"Громкость ограничена: {settings.VolumeLimit}%", "");
-            }
-        }
-
-        private void LimitSwitch_Click(object sender, RoutedEventArgs e)
-        {
-            settings.VolumeLimitEnabled = LimitSwitch.IsChecked == true;
-            LimitSlider.IsEnabled = settings.VolumeLimitEnabled;
-            if (session != null) try { EnforceLimit(session.GetVolume()); } catch { }
-            ScheduleSave();
-        }
-
-        private void LimitSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (LimitValueText == null || !initialized) return;
-            settings.VolumeLimit = (int)Math.Round(e.NewValue);
-            LimitValueText.Text = $"{settings.VolumeLimit}%";
-            if (session != null) try { EnforceLimit(session.GetVolume()); } catch { }
-            ScheduleSave();
-        }
-
         // ===================== Hearing test =====================
 
         private void HearingTest_Click(object sender, RoutedEventArgs e)
         {
             if (session?.Eq == null)
             {
-                MessageBox.Show(this, "Для теста нужны наушники со встроенным эквалайзером C-Media.", Title);
+                MessageBox.Show(this, "Для теста слуха нужен эквалайзер: встроенный C-Media или Equalizer APO.", Title);
                 return;
             }
             var restore = BeginNeutralSound();

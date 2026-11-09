@@ -56,8 +56,6 @@ namespace GraphiteCompanion.Services
         public bool MicSounds { get; set; } = true;
 
         public bool Analyzer { get; set; } = true;
-        public bool VolumeLimitEnabled { get; set; }
-        public int VolumeLimit { get; set; } = 80;
         /// <summary>Device id → "Headphones" / "Speakers" chosen by the user.</summary>
         public Dictionary<string, DeviceKind> DeviceKinds { get; set; } = new();
 

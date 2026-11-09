@@ -617,7 +617,6 @@ namespace GraphiteCompanion
             try
             {
                 float vol = session.GetVolume();
-                EnforceLimit(vol);
                 bool mute = session.GetMute();
                 if (!VolumeSlider.IsMouseCaptureWithin)
                 {
@@ -931,7 +930,6 @@ namespace GraphiteCompanion
             if (VolumeText == null) return;
             VolumeText.Text = $"{(int)Math.Round(e.NewValue)}%";
             if (suppressVolume || session == null) return;
-            if (settings.VolumeLimitEnabled && e.NewValue > settings.VolumeLimit + 0.5) { VolumeSlider.Value = settings.VolumeLimit; return; }
             try { session.SetVolume((float)(e.NewValue / 100.0)); }
             catch (Exception ex) { SettingsStore.LogError(ex); }
         }
