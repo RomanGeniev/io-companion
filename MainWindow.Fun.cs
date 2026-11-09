@@ -110,7 +110,8 @@ namespace GraphiteCompanion
                 title.Children.Add(new TextBlock { Text = app.Title, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
                 var sub = new TextBlock
                 {
-                    Text = app.IsSystemSounds ? "уведомления Windows" : app.Process + (settings.AppVolumes.ContainsKey(app.Process) ? " · запомнено" : ""),
+                    Text = "громкость запомнена",
+                    Visibility = !app.IsSystemSounds && settings.AppVolumes.ContainsKey(app.Process) ? Visibility.Visible : Visibility.Collapsed,
                     FontSize = 11,
                 };
                 sub.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
@@ -146,7 +147,7 @@ namespace GraphiteCompanion
                     if (!app.IsSystemSounds)
                     {
                         if (v == 100) settings.AppVolumes.Remove(process); else settings.AppVolumes[process] = v;
-                        sub.Text = process + (settings.AppVolumes.ContainsKey(process) ? " · запомнено" : "");
+                        sub.Visibility = settings.AppVolumes.ContainsKey(process) ? Visibility.Visible : Visibility.Collapsed;
                         ScheduleSave();
                     }
                 };

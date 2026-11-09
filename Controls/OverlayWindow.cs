@@ -277,13 +277,7 @@ namespace GraphiteCompanion.Controls
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(44) });
                 g.Children.Add(AppIcons.Tile(app.ExePath, app.IsSystemSounds));
                 var names = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-                names.Children.Add(new TextBlock { Text = app.Title, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
-                if (!app.IsSystemSounds && !app.Title.Equals(app.Process, StringComparison.OrdinalIgnoreCase))
-                {
-                    var proc = new TextBlock { Text = app.Process, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis };
-                    proc.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
-                    names.Children.Add(proc);
-                }
+                names.Children.Add(new TextBlock { Text = app.Title, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = app.Title });
                 Grid.SetColumn(names, 1);
                 g.Children.Add(names);
                 var sl = new Slider { Value = app.Volume, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 10, 0) };

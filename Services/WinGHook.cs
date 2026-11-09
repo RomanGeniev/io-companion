@@ -35,6 +35,7 @@ namespace GraphiteCompanion.Services
 
         private readonly HookProc proc;   // kept alive: the hook holds only a native pointer
         private IntPtr hook;
+        private bool gHeld;
 
         public event Action? Pressed;
         public bool Active => hook != IntPtr.Zero;
@@ -48,16 +49,28 @@ namespace GraphiteCompanion.Services
 
         private IntPtr Callback(int code, IntPtr wParam, IntPtr lParam)
         {
-            if (code >= 0 && (wParam == (IntPtr)WmKeyDown || wParam == (IntPtr)WmSysKeyDown))
+            if (code >= 0)
             {
                 var k = Marshal.PtrToStructure<KbdLlHook>(lParam);
                 bool ours = (k.flags & LlkhfInjected) != 0 && k.extra == Marker;
-                if (!ours && k.vkCode == VkG && WinDown())
+                bool down = wParam == (IntPtr)WmKeyDown || wParam == (IntPtr)WmSysKeyDown;
+                if (!ours && k.vkCode == VkG)
                 {
-                    SuppressStartMenu();
-                    // handled asynchronously: a hook must return quickly or Windows drops it
-                    Pressed?.Invoke();
-                    return (IntPtr)1; // swallow: neither Windows nor the Game Bar sees Win+G
+                    if (down && WinDown())
+                    {
+                        if (!gHeld)
+                        {
+                            gHeld = true;
+                            SuppressStartMenu();
+                            Pressed?.Invoke(); // handled asynchronously: a hook must return quickly
+                        }
+                        return (IntPtr)1; // swallow (incl. auto-repeat): Windows / Game Bar never see Win+G
+                    }
+                    if (!down && gHeld)
+                    {
+                        gHeld = false;
+                        return (IntPtr)1; // swallow the matching key-up too, some shell hotkeys fire on release
+                    }
                 }
             }
             return CallNextHookEx(hook, code, wParam, lParam);
