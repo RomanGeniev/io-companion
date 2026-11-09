@@ -389,7 +389,23 @@ namespace GraphiteCompanion
 
         // ===================== Presets =====================
 
-        private string CurrentKey => FactoryPresets.Key(settings.Earpad, settings.Mode);
+        /// <summary>Headphones or speakers for the selected device (remembered per device).</summary>
+        private DeviceKind CurrentKind
+        {
+            get
+            {
+                if (session == null) return DeviceKind.Headphones;
+                return settings.DeviceKinds.TryGetValue(session.Info.Id, out var k)
+                    ? k
+                    : SpeakerPresets.Guess(session.Info.Name, session.Eq is CmEqController);
+            }
+        }
+
+        private bool IsSpeakers => CurrentKind == DeviceKind.Speakers;
+
+        private string CurrentKey => IsSpeakers ? SpeakerPresets.Key(settings.Mode) : FactoryPresets.Key(settings.Earpad, settings.Mode);
+
+        private int[] FactoryBands() => IsSpeakers ? SpeakerPresets.Get(settings.Mode) : FactoryPresets.Get(settings.Earpad, settings.Mode);
 
         private CustomPreset? ActiveCustom =>
             settings.ActiveCustom == null ? null : settings.Custom.FirstOrDefault(c => c.Name == settings.ActiveCustom);
@@ -404,7 +420,7 @@ namespace GraphiteCompanion
             }
             if (settings.Edited.TryGetValue(CurrentKey, out var edited) && edited.Length == EqBands.Count)
                 return (int[])edited.Clone();
-            return FactoryPresets.Get(settings.Earpad, settings.Mode);
+            return FactoryBands();
         }
 
         private void StoreCurrentBands()
@@ -415,7 +431,7 @@ namespace GraphiteCompanion
                 custom.Bands = (int[])bands.Clone();
                 return;
             }
-            if (bands.SequenceEqual(FactoryPresets.Get(settings.Earpad, settings.Mode)))
+            if (bands.SequenceEqual(FactoryBands()))
                 settings.Edited.Remove(CurrentKey);
             else
                 settings.Edited[CurrentKey] = (int[])bands.Clone();
@@ -441,7 +457,11 @@ namespace GraphiteCompanion
             ModeMovies.IsChecked = builtIn && settings.Mode == ListeningMode.Movies;
             CustomList.SelectedItem = settings.ActiveCustom;
             DeleteCustomButton.IsEnabled = CustomList.SelectedItem != null;
-            PadHint.Text = FactoryPresets.Hint(settings.Earpad);
+            PadHint.Text = IsSpeakers ? SpeakerPresets.Hint : FactoryPresets.Hint(settings.Earpad);
+            KindHeadphones.IsChecked = !IsSpeakers;
+            KindSpeakers.IsChecked = IsSpeakers;
+            PadSelector.Visibility = IsSpeakers ? Visibility.Collapsed : Visibility.Visible;
+            PadCardTitle.Text = IsSpeakers ? "УСТРОЙСТВО ЗВУКА" : "АМБУШЮРЫ";
             suppress = false;
 
             UpdatePresetTitle();
@@ -455,7 +475,7 @@ namespace GraphiteCompanion
         private string PresetTitleText() =>
             settings.ActiveCustom != null
                 ? "Мой пресет · " + settings.ActiveCustom
-                : $"{FactoryPresets.Name(settings.Earpad)} · {FactoryPresets.Name(settings.Mode)}";
+                : $"{(IsSpeakers ? "Колонки" : FactoryPresets.Name(settings.Earpad))} · {FactoryPresets.Name(settings.Mode)}";
 
         private void UpdatePresetTitle()
         {
@@ -476,8 +496,19 @@ namespace GraphiteCompanion
             if (notify) NotifyChange(PresetTitleText());
         }
 
+        private void Kind_Checked(object sender, RoutedEventArgs e)
+        {
+            if (suppress || !initialized || session == null) return;
+            var kind = Enum.Parse<DeviceKind>((string)((FrameworkElement)sender).Tag);
+            settings.DeviceKinds[session.Info.Id] = kind;
+            settings.ActiveCustom = null;
+            LoadPresetToUi();
+            ScheduleSave();
+        }
+
         private void SelectEarpad(Earpad pad, bool notify)
         {
+            if (IsSpeakers) return; // earpads only make sense for headphones
             settings.Earpad = pad;
             settings.ActiveCustom = null;
             LoadPresetToUi();
@@ -665,7 +696,7 @@ namespace GraphiteCompanion
             ReloadEffects();
             if (initialized) ApplyLinkedEffects();
             PollMic();
-            if (initialized) { UpdateBrand(); UpdateMeters(); }
+            if (initialized) { UpdateBrand(); UpdateMeters(); LoadPresetToUi(); }
         }
 
         private void CloseSession()

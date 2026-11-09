@@ -6,6 +6,35 @@ namespace GraphiteCompanion.Models
 
     public enum ListeningMode { Games, Music, Movies }
 
+    public enum DeviceKind { Headphones, Speakers }
+
+    /// <summary>Starting presets for speakers / monitor speakers / home theatre (no earpads).</summary>
+    public static class SpeakerPresets
+    {
+        private static readonly System.Collections.Generic.Dictionary<ListeningMode, int[]> Map = new()
+        {
+            // Speakers lack deep bass and are heard from a distance: a bit of low end, clearer voices.
+            [ListeningMode.Games]  = new[] { 0, 1, 1, 0, -1, 0, 2, 3, 2, 1 },
+            [ListeningMode.Music]  = new[] { 3, 3, 2, 0, -1, 0, 1, 2, 2, 2 },
+            [ListeningMode.Movies] = new[] { 5, 4, 2, 0, 0, 2, 3, 2, 1, 0 },
+        };
+
+        public static int[] Get(ListeningMode mode) => (int[])Map[mode].Clone();
+
+        public static string Key(ListeningMode mode) => $"Speakers.{mode}";
+
+        public const string Hint = "Пресеты под колонки: немного баса и разборчивые голоса. Амбушюры для колонок не нужны.";
+
+        /// <summary>Guess for a device the user hasn't classified yet.</summary>
+        public static DeviceKind Guess(string deviceName, bool hasCMediaEq)
+        {
+            if (hasCMediaEq) return DeviceKind.Headphones;
+            string n = deviceName.ToLowerInvariant();
+            string[] headphones = { "наушник", "headphone", "headset", "гарнитур", "graphite", "airpods", "buds", "hands-free" };
+            return System.Array.Exists(headphones, h => n.Contains(h)) ? DeviceKind.Headphones : DeviceKind.Speakers;
+        }
+    }
+
     public static class EqBands
     {
         public const int Count = 10;

@@ -93,8 +93,25 @@
                 <!-- Earpads -->
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource CardTitle}" Text="АМБУШЮРЫ"/>
-                        <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4">
+                        <TextBlock x:Name="PadCardTitle" Style="{StaticResource CardTitle}" Text="АМБУШЮРЫ"/>
+                        <!-- what this device is: remembered per device -->
+                        <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4" Margin="0,0,0,10">
+                            <UniformGrid Columns="2">
+                                <RadioButton x:Name="KindHeadphones" GroupName="Kind" Style="{StaticResource Segment}" Tag="Headphones" Checked="Kind_Checked">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE7F6;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Наушники" Margin="6,0,0,0"/>
+                                    </StackPanel>
+                                </RadioButton>
+                                <RadioButton x:Name="KindSpeakers" GroupName="Kind" Style="{StaticResource Segment}" Tag="Speakers" Checked="Kind_Checked">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE7F5;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Колонки" Margin="6,0,0,0"/>
+                                    </StackPanel>
+                                </RadioButton>
+                            </UniformGrid>
+                        </Border>
+                        <Border x:Name="PadSelector" Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4">
                             <UniformGrid Columns="3">
                                 <RadioButton x:Name="PadFabric" GroupName="Pad" Style="{StaticResource Segment}" Content="Ткань" Tag="Fabric" Checked="Pad_Checked"/>
                                 <RadioButton x:Name="PadLeatherette" GroupName="Pad" Style="{StaticResource Segment}" Content="Кожзам" Tag="Leatherette" Checked="Pad_Checked"/>
