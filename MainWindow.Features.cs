@@ -38,8 +38,9 @@ namespace GraphiteCompanion
 
             visualTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
             visualTimer.Tick += (_, _) => VisualTick();
-            IsVisibleChanged += (_, _) => UpdateMeters();
-            StateChanged += (_, _) => UpdateMeters();
+            IsVisibleChanged += (_, _) => { UpdateMeters(); ScheduleTrim(); };
+            StateChanged += (_, _) => { UpdateMeters(); ScheduleTrim(); };
+            ScheduleTrim(); // started with --tray: trim once the startup work is done
             hadDevice = session != null;
             InitAppearance();
             InitUpdates();
@@ -65,6 +66,27 @@ namespace GraphiteCompanion
         }
 
         // ===================== Analyzer & mic meter =====================
+
+        private DispatcherTimer? trimTimer;
+
+        /// <summary>A few seconds after the window disappears into the tray, give its memory back to Windows.</summary>
+        private void ScheduleTrim()
+        {
+            trimTimer ??= new DispatcherTimer(DispatcherPriority.ApplicationIdle) { Interval = TimeSpan.FromSeconds(4) };
+            trimTimer.Stop();
+            if (IsVisible && WindowState != WindowState.Minimized) return;
+            trimTimer.Tick -= TrimTick;
+            trimTimer.Tick += TrimTick;
+            trimTimer.Start();
+        }
+
+        private void TrimTick(object? sender, EventArgs e)
+        {
+            trimTimer!.Stop();
+            if (IsVisible && WindowState != WindowState.Minimized) return;
+            spectrumPath.Data = null;
+            MemoryTrimmer.Trim();
+        }
 
         /// <summary>Hides / disables what the connected headset can't do instead of showing dead controls.</summary>
         private void UpdateCapabilityUi()

@@ -53,8 +53,8 @@ namespace GraphiteCompanion
             watcher.Changed += OnForegroundChanged;
             watcher.Start();
 
-            flyout = new TrayFlyout(this);
-            tray.FlyoutRequested += () => flyout.Toggle();
+
+            tray.FlyoutRequested += ToggleFlyout; // the panel is created on first use
             tray.MicMuteRequested += () => ToggleMicMute(fromHotkey: false);
 
             // keep the autostart entry pointing to the current exe location
@@ -515,7 +515,7 @@ namespace GraphiteCompanion
                 volume, muted, micMuted, micSession?.HasVolume == true);
         }
 
-        public void ToggleFlyout() => flyout?.Toggle();
+        public void ToggleFlyout() => (flyout ??= new TrayFlyout(this)).Toggle();
 
         public void SelectModeFromOutside(ListeningMode mode) => SelectMode(mode, notify: false);
 

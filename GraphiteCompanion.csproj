@@ -10,9 +10,12 @@
     <AssemblyName>GraphiteCompanion</AssemblyName>
     <RootNamespace>GraphiteCompanion</RootNamespace>
     <Product>IO Companion</Product>
-    <Version>1.7.0</Version>
+    <Version>1.7.1</Version>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <NoWarn>$(NoWarn);WPF0001</NoWarn>
+    <!-- small tray app: no background GC thread, give memory back eagerly -->
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <ServerGarbageCollector>false</ServerGarbageCollector>
   </PropertyGroup>
 
   <ItemGroup>

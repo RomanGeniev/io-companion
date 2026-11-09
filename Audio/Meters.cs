@@ -17,20 +17,22 @@ namespace GraphiteCompanion.Audio
         private readonly float[] ring = new float[FftSize];
         private int ringPos;
         private readonly object gate = new();
-        private readonly float[] window = new float[FftSize];
-        private readonly Complex[] fft = new Complex[FftSize];
+        // allocated on first Start, so NAudio isn't even loaded while the analyzer is never shown
+        private float[] window = Array.Empty<float>();
+        private Complex[] fft = Array.Empty<Complex>();
         private int sampleRate = 48000;
-
-        public SpectrumAnalyzer()
-        {
-            for (int i = 0; i < FftSize; i++) window[i] = (float)FastFourierTransform.HannWindow(i, FftSize);
-        }
 
         public bool Running => capture != null;
 
         public void Start(string outputDeviceId)
         {
             Stop();
+            if (window.Length == 0)
+            {
+                window = new float[FftSize];
+                for (int i = 0; i < FftSize; i++) window[i] = (float)FastFourierTransform.HannWindow(i, FftSize);
+                fft = new Complex[FftSize];
+            }
             var device = new MMDeviceEnumerator().GetDevice(outputDeviceId);
             var c = new WasapiLoopbackCapture(device);
             var fmt = c.WaveFormat;
@@ -61,6 +63,7 @@ namespace GraphiteCompanion.Audio
         /// <summary>Fills <paramref name="levels"/> (0..1, log-spaced 30 Hz – 18 kHz).</summary>
         public void GetLevels(float[] levels)
         {
+            if (window.Length == 0) return;
             lock (gate)
             {
                 for (int i = 0; i < FftSize; i++)
