@@ -371,7 +371,15 @@ namespace GraphiteCompanion
                 foreach (var (m, file) in shots)
                 {
                     if (keep?.Contains(m) == true) { saved.Add(file); continue; }
-                    try { File.Delete(file); var dir = Path.GetDirectoryName(file)!; if (!Directory.EnumerateFileSystemEntries(dir).Any()) Directory.Delete(dir); } catch { }
+                    try
+                    {
+                        File.Delete(file);
+                        // remove Игра, Фото and Монитор N folders if they are left empty
+                        var dir = Path.GetDirectoryName(file);
+                        for (int up = 0; up < 3 && dir != null && !Directory.EnumerateFileSystemEntries(dir).Any(); up++)
+                        { Directory.Delete(dir); dir = Path.GetDirectoryName(dir); }
+                    }
+                    catch { }
                 }
                 if (saved.Count == 0) return;
                 NotifyChange(saved.Count > 1 ? $"Скриншоты сохранены ({saved.Count})" : "Скриншот сохранён", "",
