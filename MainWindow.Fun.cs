@@ -101,7 +101,7 @@ namespace GraphiteCompanion
                 row.ColumnDefinitions.Add(new ColumnDefinition());
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(48) });
 
-                row.Children.Add(AppIcons.Tile(app.ExePath, app.IsSystemSounds));
+                row.Children.Add(AppIcons.Tile(app.IconPath, app.IsSystemSounds));
                 var title = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
                 title.Children.Add(new TextBlock { Text = app.Title, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
                 var sub = new TextBlock

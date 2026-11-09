@@ -14,6 +14,8 @@ namespace GraphiteCompanion.Audio
         public bool Muted { get; set; }
         public bool IsSystemSounds { get; init; }
         public string? ExePath { get; init; }        // for the program icon
+        /// <summary>What to show the icon of: for helper processes this is the main app's exe.</summary>
+        public string? IconPath { get; set; }
     }
 
     /// <summary>Per-program volume on an output device (Windows audio sessions).</summary>
@@ -31,6 +33,21 @@ namespace GraphiteCompanion.Audio
             catch { return null; } // e.g. a program running as administrator
         }
 
+        /// <summary>Icon path of a helper process: same folder, main app's exe (Apple Music plays through AMPLibraryAgent).</summary>
+        private static string? IconPath(string? exePath, string processName)
+        {
+            if (exePath != null && MainAppExe.TryGetValue(processName, out string? mainExe))
+            {
+                try
+                {
+                    string candidate = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(exePath)!, mainExe + ".exe");
+                    if (System.IO.File.Exists(candidate)) return candidate;
+                }
+                catch { }
+            }
+            return exePath;
+        }
+
         /// <summary>Clear names for common programs whose own description is odd ("nvcontainer", "Yandex with voice assistant Alice").</summary>
         private static readonly Dictionary<string, string> KnownNames = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -40,6 +57,14 @@ namespace GraphiteCompanion.Audio
             ["steam"] = "Steam", ["steamwebhelper"] = "Steam", ["nvcontainer"] = "NVIDIA (оверлей / ShadowPlay)",
             ["io_graphite_2_pro_wireless_audio_center_x64"] = "Audio Center (IO)", ["cs2"] = "Counter-Strike 2",
             ["dota2"] = "Dota 2", ["PBZ"] = "Phantom Blade Zero", ["vlc"] = "VLC", ["YandexMusic"] = "Яндекс Музыка",
+            // Apple Music plays audio through its helper process; show the app the user knows
+            ["AMPLibraryAgent"] = "Apple Music",
+        };
+
+        /// <summary>The session can belong to a helper process; for the icon, prefer the main app's exe.</summary>
+        private static readonly Dictionary<string, string> MainAppExe = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["AMPLibraryAgent"] = "AppleMusic",
         };
 
         private static string FriendlyTitle(uint pid, string fallback)
@@ -83,9 +108,12 @@ namespace GraphiteCompanion.Audio
                     IsSystemSounds = s.IsSystemSoundsSession,
                     Title = s.IsSystemSoundsSession ? "Системные звуки" : FriendlyTitle(s.GetProcessID, name),
                     ExePath = s.IsSystemSoundsSession ? null : ExePathOf(s.GetProcessID),
+                    IconPath = null,
                     Volume = (int)Math.Round(vol.Volume * 100),
                     Muted = vol.Mute,
                 };
+                if (result[name].ExePath != null)
+                    result[name].IconPath = IconPath(result[name].ExePath, name);
             }
             return result.Values
                 .Where(a => !a.Process.Equals(Process.GetCurrentProcess().ProcessName, StringComparison.OrdinalIgnoreCase))

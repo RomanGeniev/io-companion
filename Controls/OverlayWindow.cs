@@ -234,7 +234,11 @@ namespace GraphiteCompanion.Controls
                 if (e.Key != Key.Escape) return;
                 if (outputPopup.IsOpen) outputPopup.IsOpen = false; else Close();
             };
-            Deactivated += (_, _) => { if (IsVisible) Close(); }; // alt-tab / click into another window
+            Deactivated += (_, _) =>
+            {
+                // The seek fallback briefly raises the player's own window; that is not the user leaving
+                if (IsVisible && !Services.MediaService.SeekInProgress) Close();
+            }; // alt-tab / click into another window
             Closed += (_, _) => main.CompareOff();
         }
 
@@ -426,7 +430,7 @@ namespace GraphiteCompanion.Controls
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
                 g.ColumnDefinitions.Add(new ColumnDefinition());
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(44) });
-                g.Children.Add(AppIcons.Tile(app.ExePath, app.IsSystemSounds));
+                g.Children.Add(AppIcons.Tile(app.IconPath, app.IsSystemSounds));
                 var names = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
                 names.Children.Add(new TextBlock { Text = app.Title, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = app.Title });
                 Grid.SetColumn(names, 1);

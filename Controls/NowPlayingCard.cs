@@ -39,6 +39,7 @@ namespace GraphiteCompanion.Controls
         private bool busy, dragging, settingValue;
         private DateTime ignoreUntil;     // after a seek / skip the app needs a moment before it reports the new position
         private int tick;
+        private int seekFails;           // apps whose system seek was ignored: they may still work via their own slider
 
         private static T R<T>(string key) => (T)Application.Current.FindResource(key);
 
@@ -89,20 +90,30 @@ namespace GraphiteCompanion.Controls
             buttons.Children.Add(next);
 
             // ---- seek bar
+            // Some apps (Apple Music) publish a timeline but ignore the system seek command
+            // and declare "no position control". MediaService.Seek falls back to their own
+            // window slider, so dragging is allowed whenever a timeline exists; after two
+            // ignored seeks in a row the bar gives up and becomes read-only.
             seek.SetResourceReference(StyleProperty, "VolumeSlider");
             seek.Minimum = 0;
             seek.Maximum = 1;
             seek.SmallChange = 5;
             seek.LargeChange = 10;
-            seek.PreviewMouseLeftButtonDown += (_, _) => { if (state?.CanSeek == true) dragging = true; };
+            seek.Focusable = false;   // arrow keys would snap the thumb back on the next poll
+            seek.PreviewMouseLeftButtonDown += (_, e0) =>
+            {
+                if (CanDragSeek()) dragging = true;
+                else e0.Handled = true;   // read-only: no drag and no click-to-point jump
+            };
             seek.PreviewMouseLeftButtonUp += async (_, _) =>
             {
                 if (!dragging) return;
                 dragging = false;
                 var to = TimeSpan.FromSeconds(seek.Value);
                 if (state != null) { state = With(state, to, state.Playing); stateTime = DateTime.Now; }
-                ignoreUntil = DateTime.Now.AddMilliseconds(900);
-                await MediaService.Seek(to);
+                ignoreUntil = DateTime.Now.AddMilliseconds(1500);   // the UIA fallback path needs longer
+                bool applied = await MediaService.Seek(to);
+                if (!applied && ++seekFails >= 2) Show();   // both channels dead: flip to read-only
             };
             seek.ValueChanged += (_, e) => { if (!settingValue) ShowTimes(TimeSpan.FromSeconds(e.NewValue)); };
 
@@ -169,6 +180,11 @@ namespace GraphiteCompanion.Controls
             play.ToolTip = "Пауза / продолжить · " + main.HotkeyLabel("media.play");
         }
 
+        /// <summary>Dragging is allowed when the app takes the system command, or once or twice
+        /// for apps that don't (their own slider may still take it via UIA).</summary>
+        private bool CanDragSeek() => state != null && state.Duration > TimeSpan.Zero
+            && (state.CanSeek || seekFails < 2);
+
         private void Skip()
         {
             ignoreUntil = DateTime.Now.AddMilliseconds(500);
@@ -190,6 +206,7 @@ namespace GraphiteCompanion.Controls
             {
                 var s = await MediaService.GetAsync();
                 if (DateTime.Now < ignoreUntil && s != null && state != null && s.Key == state.Key) return;
+                if (s == null || state == null || s.Key != state.Key) seekFails = 0;   // new track / app: give seeking a fresh chance
                 state = s;
                 stateTime = DateTime.Now;
                 Show();
@@ -231,9 +248,10 @@ namespace GraphiteCompanion.Controls
 
             bool timeline = has && s!.Duration > TimeSpan.Zero;
             seek.Visibility = timeRow.Visibility = timeline ? Visibility.Visible : Visibility.Collapsed;
-            seek.IsEnabled = timeline && s!.CanSeek;
-            seek.Cursor = seek.IsEnabled ? Cursors.Hand : Cursors.Arrow;
-            seek.ToolTip = seek.IsEnabled ? null : "Эта программа не даёт перематывать";
+            bool canSeek = timeline && CanDragSeek();
+            seek.Opacity = timeline ? 1 : 0.45;
+            seek.Cursor = canSeek ? Cursors.Hand : Cursors.No;   // No = "you can look, not touch"
+            seek.ToolTip = timeline && !canSeek ? "Эта программа не даёт перематывать — только показывает прогресс" : null;
             ShowPosition();
         }
 

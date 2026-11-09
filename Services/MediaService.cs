@@ -172,17 +172,97 @@ namespace GraphiteCompanion.Services
         public static Task Previous() => Command(s => s.TrySkipPreviousAsync().AsTask(), VkPrev);
         public static Task PlayPause() => Command(s => s.TryTogglePlayPauseAsync().AsTask(), VkPlayPause);
 
-        public static async Task Seek(TimeSpan position)
+        /// <summary>True while the seek fallback is talking to the player's own window; it may briefly
+        /// steal the focus, and the overlay must not treat that as "the user went elsewhere".</summary>
+        public static bool SeekInProgress { get; private set; }
+
+        public static async Task<bool> Seek(TimeSpan position)
         {
             var s = await Session();
-            if (s == null) return;
+            if (s == null) return false;
+
+            TimeSpan duration = TimeSpan.Zero, before = TimeSpan.Zero;
             try
             {
                 var tl = s.GetTimelineProperties();
+                duration = tl.EndTime - tl.StartTime;
+                before = tl.Position - tl.StartTime;
                 await s.TryChangePlaybackPositionAsync((tl.StartTime + position).Ticks);
             }
             catch { }
+
+            // Some apps answer "done" and silently ignore the command (Apple Music does):
+            // wait a moment and check that the position really moved.
+            try
+            {
+                await System.Threading.Tasks.Task.Delay(700);
+                var tl2 = s.GetTimelineProperties();
+                var now = tl2.Position - tl2.StartTime;
+                if (Math.Abs((now - position).TotalSeconds) < 2.5) return true;
+            }
+            catch { }
+
+            // The last resort drags the player's own slider, and that activates its window:
+            // remember what was in front (usually our overlay) and put it back afterwards.
+            SeekInProgress = true;
+            IntPtr front = GetForegroundWindow();
+            try
+            {
+                return await System.Threading.Tasks.Task.Run(() => SeekViaUiAutomation(position, duration, before, front));
+            }
+            finally { SeekInProgress = false; }
         }
+
+        /// <summary>
+        /// Last resort for apps that publish a timeline but ignore the system seek command:
+        /// find the player's own seek slider in its window (Apple Music exposes "LCDScrubber"
+        /// with a RangeValue pattern) and set its value directly. The window must be open,
+        /// not minimized to the tray. <paramref name="restoreForeground"/> is the window that
+        /// was in front before (SetValue raises the player's window) — the focus goes back to it.
+        /// </summary>
+        private static bool SeekViaUiAutomation(TimeSpan target, TimeSpan duration, TimeSpan before, IntPtr restoreForeground)
+        {
+            if (duration <= TimeSpan.Zero) return false;
+            try
+            {
+                var root = System.Windows.Automation.AutomationElement.RootElement;
+                var windows = root.FindAll(System.Windows.Automation.TreeScope.Children,
+                    System.Windows.Automation.Condition.TrueCondition);
+                var sliderCond = new System.Windows.Automation.PropertyCondition(
+                    System.Windows.Automation.AutomationElement.ControlTypeProperty,
+                    System.Windows.Automation.ControlType.Slider);
+
+                foreach (System.Windows.Automation.AutomationElement win in windows)
+                {
+                    try
+                    {
+                        if (win.Current.ProcessId == Environment.ProcessId) continue;
+                        var sliders = win.FindAll(System.Windows.Automation.TreeScope.Descendants, sliderCond);
+                        foreach (System.Windows.Automation.AutomationElement sl in sliders)
+                        {
+                            object? p = null;
+                            if (!sl.TryGetCurrentPattern(System.Windows.Automation.RangeValuePattern.Pattern, out p)) continue;
+                            var rv = (System.Windows.Automation.RangeValuePattern)p;
+                            var cur = rv.Current;
+                            if (cur.IsReadOnly) continue;
+                            // match the session's track: length ≈ duration, value ≈ position before the seek
+                            if (Math.Abs(cur.Maximum - duration.TotalSeconds) > Math.Max(5, duration.TotalSeconds * 0.08)) continue;
+                            if (Math.Abs(cur.Value - before.TotalSeconds) > 10) continue;
+                            rv.SetValue((double)target.TotalSeconds);
+                            if (restoreForeground != IntPtr.Zero) SetForegroundWindow(restoreForeground);
+                            return true;
+                        }
+                    }
+                    catch { }
+                }
+                if (restoreForeground != IntPtr.Zero) SetForegroundWindow(restoreForeground);
+            }
+            catch { }
+            return false;
+        }
+
+        [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
 
         private static async Task Command(Func<MediaSession, Task<bool>> run, byte fallbackKey)
         {
