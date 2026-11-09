@@ -16,7 +16,7 @@ namespace GraphiteCompanion
 {
     public sealed record QuickState(
         string Preset, string Device, bool EqEnabled, ListeningMode? Mode,
-        int Volume, bool Muted, bool MicMuted, bool HasMic);
+        int Volume, bool Muted, bool MicMuted, bool HasMic, int? Battery);
 
     public sealed class TargetItem
     {
@@ -569,7 +569,8 @@ namespace GraphiteCompanion
                 session?.Info.Name ?? "Наушники не подключены",
                 settings.EqEnabled,
                 settings.ActiveCustom == null ? settings.Mode : null,
-                volume, muted, micMuted, micSession?.HasVolume == true);
+                volume, muted, micMuted, micSession?.HasVolume == true,
+                batteryLevel?.Percent);
         }
 
         public void ToggleFlyout() => (flyout ??= new TrayFlyout(this)).Toggle();

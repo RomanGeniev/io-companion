@@ -24,7 +24,11 @@
                 </Border>
                 <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
                     <TextBlock x:Name="PresetText" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock x:Name="DeviceText" FontSize="11" Foreground="{DynamicResource SubTextBrush}" TextTrimming="CharacterEllipsis"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="DeviceText" FontSize="11" Foreground="{DynamicResource SubTextBrush}" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="BatteryText" FontSize="11" FontWeight="SemiBold" Margin="8,0,0,0"
+                                   Foreground="{DynamicResource SubTextBrush}" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
                 </StackPanel>
                 <CheckBox x:Name="EqSwitch" Grid.Column="2" Style="{StaticResource Switch}" Content="EQ" VerticalAlignment="Center"
                           Click="EqSwitch_Click" ToolTip="Эквалайзер вкл/выкл"/>

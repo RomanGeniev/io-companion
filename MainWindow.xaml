@@ -64,6 +64,9 @@
                             <TextBlock x:Name="StatusText" Grid.Column="1" Margin="8,0,0,0" Text="Поиск наушников…"
                                        Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"/>
                         </Grid>
+                        <TextBlock x:Name="BatteryText" Text="" Visibility="Collapsed" Margin="2,6,0,0"
+                                   Foreground="{DynamicResource SubTextBrush}" FontWeight="SemiBold"
+                                   ToolTip="Заряд батареи беспроводного устройства. Показывается, только если устройство отдаёт его по стандарту (HID Battery Page или BLE)."/>
                         <Grid Margin="0,16,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>

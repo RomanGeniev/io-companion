@@ -54,6 +54,8 @@ namespace GraphiteCompanion
         private bool suppressCombo;
         private bool reallyExit;
         private bool trayHintShown;
+        private readonly Services.BatteryService battery = new();
+        private Services.BatteryService.Level? batteryLevel;
 
         public MainWindow()
         {
@@ -637,6 +639,7 @@ namespace GraphiteCompanion
         private void Poll()
         {
             if (++pollTick % 3 == 0 || session == null) RefreshDevices(force: false);
+            if (pollTick % 60 == 0 || batteryLevel == null && pollTick % 15 == 0) UpdateBattery();
             PollMic();
             if (initialized) FunTick();
             if (session == null || !session.HasVolume) return;
@@ -657,6 +660,46 @@ namespace GraphiteCompanion
                 CloseSession();
                 deviceSignature = "";
             }
+        }
+
+        /// <summary>Refreshes the battery hint of the current device; hidden when it does not report one.
+        /// HID/GATT reads can take hundreds of milliseconds, so they run on a worker thread
+        /// and only the UI update happens here.</summary>
+        private volatile bool batteryReading;
+
+        private void UpdateBattery()
+        {
+            if (session == null || batteryReading) return;
+            var info = session.Info;
+            batteryReading = true;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                Services.BatteryService.Level? level = null;
+                try { level = battery.Read(info.Id, info.Name); }
+                catch (Exception ex) { SettingsStore.LogError(ex); }
+                Dispatcher.BeginInvoke(() =>
+                {
+                    batteryReading = false;
+                    bool changed = !Equals(level, batteryLevel);
+                    batteryLevel = level;
+                    if (!changed) return;
+                    UpdateBatteryUi();
+                    if (flyoutIsVisible()) flyout?.Refresh();
+                    if (level != null && battery.ShouldNotifyLow(level, out string msg))
+                        NotifyChange(msg);
+                });
+            });
+        }
+
+        private bool flyoutIsVisible() => flyout != null && flyout.IsVisible;
+
+        private void UpdateBatteryUi()
+        {
+            if (BatteryText == null) return;
+            if (batteryLevel == null) { BatteryText.Text = ""; BatteryText.Visibility = Visibility.Collapsed; return; }
+            BatteryText.Text = $"🔋 {batteryLevel.Percent}%";
+            BatteryText.Visibility = Visibility.Visible;
+            BatteryText.SetResourceReference(TextBlock.ForegroundProperty, batteryLevel.Percent <= 20 ? "WarnBrush" : "SubTextBrush");
         }
 
         private void RefreshDevices(bool force)
@@ -725,6 +768,7 @@ namespace GraphiteCompanion
             if (initialized) ApplyLinkedEffects();
             PollMic();
             if (initialized) { CompareOff(); RestoreDeviceProfile(); UpdateBrand(); UpdateMeters(); LoadPresetToUi(); }
+            Dispatcher.BeginInvoke(new Action(UpdateBattery), System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private void CloseSession()
@@ -740,6 +784,8 @@ namespace GraphiteCompanion
             micSession?.Dispose();
             micSession = null;
             VolumeText.Text = "—";
+            batteryLevel = null;
+            if (BatteryText != null) BatteryText.Visibility = Visibility.Collapsed;
             if (MicName != null)
             {
                 MicName.Text = "Микрофон гарнитуры не найден";

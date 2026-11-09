@@ -48,6 +48,8 @@ namespace GraphiteCompanion
             var s = main.GetQuickState();
             PresetText.Text = s.Preset;
             DeviceText.Text = s.Device;
+            BatteryText.Text = s.Battery.HasValue ? $"🔋 {s.Battery}%" : "";
+            BatteryText.SetResourceReference(ForegroundProperty, s.Battery is <= 20 ? "WarnBrush" : "SubTextBrush");
             EqSwitch.IsChecked = s.EqEnabled;
             ModeGames.IsChecked = s.Mode == ListeningMode.Games;
             ModeMusic.IsChecked = s.Mode == ListeningMode.Music;
