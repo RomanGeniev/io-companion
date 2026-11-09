@@ -98,12 +98,12 @@ namespace GraphiteCompanion.Services
         }
 
         private string Inputs(RecordOptions o) =>
-            $"-filter_complex \"{VideoInput(o)}[v]\" " +
+            $"-filter_complex \"{VideoInput(o)},setpts=PTS-STARTPTS[v]\" " +
             (o.SystemSound || o.Microphone ? "-f s16le -ar 48000 -ac 2 -i pipe:0 " : "");
 
         private Process Launch(string args, bool withAudio, string logName)
         {
-            var psi = new ProcessStartInfo(FfmpegInstaller.ExePath, "-hide_banner -loglevel warning -stats_period 2 -y " + args)
+            var psi = new ProcessStartInfo(FfmpegInstaller.ExePath, "-hide_banner -loglevel error -y " + args)
             {
                 CreateNoWindow = true, UseShellExecute = false,
                 RedirectStandardInput = true, RedirectStandardError = true, RedirectStandardOutput = true,
