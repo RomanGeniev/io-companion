@@ -20,6 +20,7 @@ namespace GraphiteCompanion.Controls
     {
         private readonly MainWindow main;
         private readonly StackPanel apps = new();
+        private readonly UniformGrid outputs = new();
         private readonly TextBlock title = new() { FontSize = 20, FontWeight = FontWeights.SemiBold };
         private readonly TextBlock subtitle = new() { FontSize = 12 };
         private readonly RadioButton[] modes = new RadioButton[3];
@@ -131,8 +132,13 @@ namespace GraphiteCompanion.Controls
             var hint = new TextBlock { Text = "Esc или та же горячая клавиша — закрыть", FontSize = 11, Margin = new Thickness(0, 14, 0, 0), HorizontalAlignment = HorizontalAlignment.Center };
             hint.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
 
+            // ---- output device (where Windows sends the sound)
+            var outTitle = new TextBlock { Text = "ВЫВОД ЗВУКА", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 18, 0, 8) };
+            outTitle.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
+            outputs.Columns = 2;
+
             var content2 = new StackPanel();
-            foreach (var el in new UIElement[] { header, modeBox, row, volRow, appsTitle, appsScroll, hint }) content2.Children.Add(el);
+            foreach (var el in new UIElement[] { header, outTitle, outputs, modeBox, row, volRow, appsTitle, appsScroll, hint }) content2.Children.Add(el);
 
             panel = new Border
             {
@@ -201,7 +207,49 @@ namespace GraphiteCompanion.Controls
             micText.Text = s.MicMuted ? "Микрофон выкл." : "Микрофон вкл.";
             micButton.SetResourceReference(ForegroundProperty, s.MicMuted ? "MutedFgBrush" : "TextBrush");
             loading = false;
+            RefreshOutputs();
             RefreshApps();
+        }
+
+        /// <summary>"Динамики (Graphite 2 Pro Max WL)" → "Graphite 2 Pro Max WL"; "LT1080P (NVIDIA …)" → "LT1080P".</summary>
+        private static string ShortName(string name)
+        {
+            int open = name.IndexOf('('), close = name.LastIndexOf(')');
+            if (open <= 0 || close < open) return name;
+            string before = name[..open].Trim(), inside = name.Substring(open + 1, close - open - 1);
+            string[] generic = { "динамики", "speakers", "наушники", "headphones", "headset", "цифровой выход", "digital output", "realtek" };
+            return Array.Exists(generic, g => before.StartsWith(g, StringComparison.OrdinalIgnoreCase)) ? inside : before;
+        }
+
+        private void RefreshOutputs()
+        {
+            outputs.Children.Clear();
+            List<AudioDeviceInfo> list;
+            try { list = AudioDevices.ListActiveOutputs(); } catch { return; }
+            string? current = DefaultDevice.Get(0);
+            foreach (var d in list)
+            {
+                var dev = d;
+                var content = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+                content.Children.Add(new TextBlock
+                {
+                    Text = dev.HasCmEq || dev.Name.Contains("Наушники", StringComparison.OrdinalIgnoreCase) ? "" : "",
+                    FontFamily = R<FontFamily>("IconFont"), VerticalAlignment = VerticalAlignment.Center,
+                });
+                content.Children.Add(new TextBlock { Text = ShortName(dev.Name), Margin = new Thickness(8, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 200 });
+                var rb = new RadioButton
+                {
+                    GroupName = "OverlayOut", Content = content, IsChecked = dev.Id == current,
+                    Margin = new Thickness(0, 0, 6, 6), ToolTip = dev.Name,
+                };
+                rb.SetResourceReference(StyleProperty, "Segment");
+                rb.Click += (_, _) =>
+                {
+                    if (DefaultDevice.Set(dev.Id)) main.SelectDeviceFromOutside(dev.Id);
+                    Refresh();
+                };
+                outputs.Children.Add(rb);
+            }
         }
 
         private void RefreshApps()

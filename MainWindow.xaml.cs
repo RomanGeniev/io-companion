@@ -777,32 +777,20 @@ namespace GraphiteCompanion
             string mic = Reg(() => ToggleMicMute(fromHotkey: true),
                 (CA, 0x4D, "Ctrl + Alt + M"), (CSA, 0x4D, "Ctrl + Shift + Alt + M"), (CA, 0x7B, "Ctrl + Alt + F12"));
             MicHotkeyText.Text = $"{mic} — выключить / включить микрофон из любой программы, даже в игре.";
-            // Win+G belongs to the Xbox Game Bar; it's tried first in case the user turned the Game Bar off
-            string over = Reg(ToggleOverlay,
-                (HotkeyService.Win, 0x47, "Win + G"),
-                (CA, 0x47, "Ctrl + Alt + G"), (CSA, 0x47, "Ctrl + Shift + Alt + G"));
+            // Win+G: taken from the Xbox Game Bar with a keyboard hook; Ctrl+Alt+G always works as well
+            string over = Reg(ToggleOverlay, (CA, 0x47, "Ctrl + Alt + G"), (CSA, 0x47, "Ctrl + Shift + Alt + G"));
+            winG = new WinGHook();
+            winG.Pressed += () => Dispatcher.BeginInvoke(new Action(ToggleOverlay));
+            if (winG.Active) over = "Win + G  (или " + over + ")";
             string cmp = Reg(ToggleCompare, (CA, 0x43, "Ctrl + Alt + C"), (CSA, 0x43, "Ctrl + Shift + Alt + C"));
             CompareButton.ToolTip = $"Держите — звук без эквалайзера и эффектов, отпустите — снова ваш. {cmp} — переключить";
 
             hotkeyLine = $"{pad} — амбушюры  ·  {eq} — эквалайзер  ·  {mic} — микрофон  ·  {cmp} — сравнить";
             SetOverlayHotkeyLabel(over);
-            // Win+G is held by the Xbox Game Bar until it's turned off and Windows signs in again:
-            // keep trying quietly and switch to Win+G as soon as it becomes free.
-            if (over != "Win + G")
-            {
-                winGTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
-                winGTimer.Tick += (_, _) =>
-                {
-                    if (!hotkeys.Register(HotkeyService.Win, 0x47, ToggleOverlay)) return;
-                    winGTimer.Stop();
-                    SetOverlayHotkeyLabel("Win + G (или " + over + ")");
-                };
-                winGTimer.Start();
-            }
         }
 
         private string hotkeyLine = "";
-        private System.Windows.Threading.DispatcherTimer? winGTimer;
+        private WinGHook? winG;
 
         private void SetOverlayHotkeyLabel(string over) =>
             HotkeysText.Text = $"Горячие клавиши работают везде:  {over} — панель поверх окон  ·  {hotkeyLine}";
@@ -845,6 +833,7 @@ namespace GraphiteCompanion
             DisposeFeatures();
             SettingsStore.Save(settings);
             hotkeys.Dispose();
+            winG?.Dispose();
             tray.Dispose();
             CloseSession();
             Application.Current.Shutdown();

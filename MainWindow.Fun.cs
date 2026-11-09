@@ -164,6 +164,15 @@ namespace GraphiteCompanion
 
         public string? CurrentDeviceId => session?.Info.Id;
 
+        /// <summary>The overlay switched the Windows output: follow it with the equalizer / presets too.</summary>
+        public void SelectDeviceFromOutside(string deviceId)
+        {
+            settings.DeviceId = deviceId;
+            ScheduleSave();
+            RefreshDevices(force: true);
+            NotifyChange("Звук: " + (session?.Info.Name ?? ""), "");
+        }
+
         /// <summary>Sets a program's volume on the selected device and (optionally) remembers it.</summary>
         public void SetAppVolume(string process, int volume, bool remember)
         {
