@@ -60,7 +60,7 @@ namespace GraphiteCompanion
         private bool recBusy;
         private string replayKey = "Alt + F10", recordKey = "Alt + F9", shotKey = "Alt + F8";
 
-        private static readonly int[] Durations = { 15, 30, 60, 120, 300 };
+        private static readonly int[] Durations = { 15, 30, 60, 120, 300, 600, 900, 1800 };
         private static readonly int[] Heights = { 0, 2160, 1440, 1080, 720 };
         private static readonly int[] Fpss = { 30, 60, 120 };
         private static readonly string[] QualityNames = { "Низкое", "Среднее", "Высокое" };
@@ -86,7 +86,89 @@ namespace GraphiteCompanion
         private string RecFolder =>
             settings.ReplayFolder ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "IO Companion");
 
-        private static string DurationLabel(int d) => d < 60 ? $"{d} секунд" : d == 60 ? "1 минута" : d < 300 ? $"{d / 60} минуты" : $"{d / 60} минут";
+        private const int CustomValue = -1, MinReplay = 5, MaxReplay = 3600;
+
+        private static string Plural(int n, string one, string few, string many)
+        {
+            int a = n % 100, b = n % 10;
+            return a is >= 11 and <= 14 ? many : b == 1 ? one : b is >= 2 and <= 4 ? few : many;
+        }
+
+        /// <summary>"15 секунд", "1 минута", "1 мин 30 с", "15 минут". <paramref name="accusative"/>: "последнюю 1 минуту".</summary>
+        private static string DurationLabel(int s, bool accusative = false)
+        {
+            if (s < 60) return $"{s} {Plural(s, accusative ? "секунду" : "секунда", "секунды", "секунд")}";
+            if (s % 60 != 0) return $"{s / 60} мин {s % 60} с";
+            int m = s / 60;
+            return $"{m} {Plural(m, accusative ? "минуту" : "минута", "минуты", "минут")}";
+        }
+
+        private void BuildDurationCombo()
+        {
+            var list = Durations.Select(d => new Option(d, DurationLabel(d))).ToList();
+            if (!Durations.Contains(settings.ReplaySeconds))
+                list.Add(new Option(settings.ReplaySeconds, "Своё: " + DurationLabel(settings.ReplaySeconds)));
+            list.Add(new Option(CustomValue, "Своё время…"));
+            DurationCombo.ItemsSource = list;
+            DurationCombo.SelectedItem = list.First(o => o.Value == settings.ReplaySeconds);
+            UpdateDurationHint();
+        }
+
+        private void CustomDuration_Click(object sender, RoutedEventArgs e) => ApplyCustomDuration();
+
+        private void CustomDurationBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Enter) { ApplyCustomDuration(); e.Handled = true; }
+        }
+
+        private void ApplyCustomDuration()
+        {
+            if (!int.TryParse(CustomDurationBox.Text.Trim(), out int n) || n <= 0)
+            {
+                DurationHint.Text = "Введите целое число, например 15.";
+                return;
+            }
+            long s = CustomDurationUnit.SelectedIndex == 0 ? n * 60L : n;
+            if (s < MinReplay || s > MaxReplay)
+            {
+                DurationHint.Text = "Можно от 5 секунд до 60 минут.";
+                return;
+            }
+            settings.ReplaySeconds = (int)s;
+            CustomDurationPanel.Visibility = Visibility.Collapsed;
+            BuildDurationCombo();
+            RecSettingsChanged();
+        }
+
+        /// <summary>Rough bitrate of one monitor with its settings (hardware H.264), Mbit/s.</summary>
+        private double EstimateMbps(MonitorItem m)
+        {
+            var r = Rec(m);
+            var b = m.Screen.Bounds;
+            double h = r.Height > 0 && r.Height < b.Height ? r.Height : b.Height;
+            double w = h * b.Width / b.Height;
+            double[] qf = { 0.6, 1.0, 1.6 };
+            return 15.0 * (w * h) / (1920 * 1080) * r.Fps / 60.0 * qf[r.Quality];
+        }
+
+        /// <summary>How much disk the replay buffer takes for the chosen time on the selected monitors.</summary>
+        private void UpdateDurationHint()
+        {
+            if (DurationHint == null) return;
+            double mb = SelectedMonitors.Sum(m => EstimateMbps(m)) * settings.ReplaySeconds / 8.0;
+            string size = mb >= 1024 ? $"{mb / 1024:0.#} ГБ" : $"{Math.Max(1, mb):0} МБ";
+            string text = $"Временный буфер займёт примерно {size} на диске C:" +
+                          (SelectedMonitors.Count() > 1 ? $" (на все мониторы)." : ".");
+            try
+            {
+                var drive = new DriveInfo(Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData))!);
+                double free = drive.AvailableFreeSpace / 1048576.0;
+                // the saved copy needs the same space again while it is being joined
+                if (mb * 2 > free) text += $" Свободно только {free / 1024:0.#} ГБ — уменьшите время или качество.";
+            }
+            catch { }
+            DurationHint.Text = text;
+        }
 
         /// <summary>Own resolution / fps / quality of a monitor; new monitors start from the old common settings.</summary>
         private MonitorRecordSettings Rec(MonitorItem m)
@@ -102,13 +184,27 @@ namespace GraphiteCompanion
 
         private void InitRecord()
         {
-            DurationCombo.ItemsSource = Durations.Select(d => new Option(d, DurationLabel(d))).ToList();
-            DurationCombo.SelectedItem = ((List<Option>)DurationCombo.ItemsSource).FirstOrDefault(o => o.Value == settings.ReplaySeconds);
+            BuildDurationCombo();
             DurationCombo.SelectionChanged += (_, _) =>
             {
-                if (DurationCombo.SelectedItem is Option o) { settings.ReplaySeconds = o.Value; RecSettingsChanged(); }
+                if (DurationCombo.SelectedItem is not Option o) return;
+                if (o.Value == CustomValue)
+                {
+                    CustomDurationPanel.Visibility = Visibility.Visible;
+                    bool minutes = settings.ReplaySeconds % 60 == 0;
+                    CustomDurationUnit.SelectedIndex = minutes ? 0 : 1;
+                    CustomDurationBox.Text = (minutes ? settings.ReplaySeconds / 60 : settings.ReplaySeconds).ToString();
+                    CustomDurationBox.Focus();
+                    CustomDurationBox.SelectAll();
+                    return;
+                }
+                CustomDurationPanel.Visibility = Visibility.Collapsed;
+                if (o.Value == settings.ReplaySeconds) return;
+                settings.ReplaySeconds = o.Value;
+                UpdateDurationHint();
+                RecSettingsChanged();
             };
-            DurationTitle.Children.Add(Info(TipDuration));
+            DurationTitle.Children.Add(Info(TipDuration + " Можно задать своё время — от 5 секунд до 60 минут."));
             SoundTitle.Children.Add(Info(TipSound));
             MonitorsTitle.Children.Add(Info(TipMonitors));
 
@@ -126,6 +222,7 @@ namespace GraphiteCompanion
             if (sel.Count == 0) sel.Add((monitors.FirstOrDefault(m => m.Screen.Primary) ?? monitors[0]).Device);
             settings.RecordMonitors = sel;
             BuildMonitorRows();
+            UpdateDurationHint();   // needs the monitor list
             UpdateMonitorHint();
 
             RecSystemSwitch.IsChecked = settings.RecordSystemSound;
@@ -310,6 +407,7 @@ namespace GraphiteCompanion
         private void RecSettingsChanged()
         {
             ScheduleSave();
+            UpdateDurationHint();
             if (AnyBuffer) _ = StartReplayBuffer();
             UpdateRecStatus();
         }
@@ -642,6 +740,6 @@ namespace GraphiteCompanion
                            "Защищённое видео (Netflix, Кинопоиск) Windows записывает чёрным экраном.";
         }
 
-        private static string DurationText(int s) => s < 60 ? $"{s} секунд" : s == 60 ? "1 минуту" : s < 300 ? $"{s / 60} минуты" : $"{s / 60} минут";
+        private static string DurationText(int s) => DurationLabel(s, accusative: true);
     }
 }

@@ -149,7 +149,8 @@ namespace GraphiteCompanion.Services
             Directory.CreateDirectory(RingDir);
             foreach (var f in Directory.GetFiles(RingDir)) { try { File.Delete(f); } catch { } }
             EnsureAudio(o);
-            int wrap = o.ReplaySeconds / SegmentSeconds + 3;
+            // spare segments: saving copies the oldest ones while FFmpeg keeps writing, long replays need more room
+            int wrap = o.ReplaySeconds / SegmentSeconds + Math.Max(10, o.ReplaySeconds / 10);
             string args = Inputs(o) + Encode(o).Replace("-map 0:v", "-map [v]") +
                           $" -f segment -segment_time {SegmentSeconds} -segment_format mpegts -segment_wrap {wrap}" +
                           $" -reset_timestamps 1 -flush_packets 1 \"{Path.Combine(RingDir, "seg%04d.ts")}\"";
@@ -178,17 +179,22 @@ namespace GraphiteCompanion.Services
             try
             {
                 var list = new StringBuilder();
-                for (int i = 0; i < take.Count; i++)
+                // oldest first (they are overwritten first); off the UI thread - long replays are gigabytes
+                await Task.Run(() =>
                 {
-                    string dst = Path.Combine(snap, $"p{i:0000}.ts");
-                    File.Copy(take[i].FullName, dst, true);
-                    list.Append("file '").Append(dst.Replace('\\', '/').Replace("'", "'\\''")).Append("'\n");
-                }
+                    for (int i = 0; i < take.Count; i++)
+                    {
+                        string dst = Path.Combine(snap, $"p{i:0000}.ts");
+                        try { File.Copy(take[i].FullName, dst, true); }
+                        catch (IOException) { continue; } // segment being rewritten right now: skip it
+                        list.Append("file '").Append(dst.Replace('\\', '/').Replace("'", "'\\''")).Append("'\n");
+                    }
+                });
                 string listFile = Path.Combine(snap, "list.txt");
                 await File.WriteAllTextAsync(listFile, list.ToString());
                 Directory.CreateDirectory(opts.Folder);
                 string target = UniquePath(opts.Folder, VideoDir, title, DateTime.Now);
-                int code = await FfmpegInstaller.RunAsync($"-y -f concat -safe 0 -i \"{listFile}\" -c copy -movflags +faststart \"{target}\"", 120000);
+                int code = await FfmpegInstaller.RunAsync($"-y -f concat -safe 0 -i \"{listFile}\" -c copy -movflags +faststart \"{target}\"", Math.Max(120000, opts.ReplaySeconds * 1000));
                 if (code != 0 || !File.Exists(target)) throw new IOException("FFmpeg не смог собрать ролик");
                 return target;
             }

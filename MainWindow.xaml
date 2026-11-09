@@ -765,6 +765,23 @@
                                         <TextBlock Style="{StaticResource CardTitle}" Text="ДЛИТЕЛЬНОСТЬ ПОВТОРА"/>
                                     </StackPanel>
                                     <ComboBox x:Name="DurationCombo" DisplayMemberPath="Label"/>
+                                    <Grid x:Name="CustomDurationPanel" Visibility="Collapsed" Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="80"/>
+                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="CustomDurationBox" VerticalContentAlignment="Center" KeyDown="CustomDurationBox_KeyDown"
+                                                 ToolTip="Целое число, например 15"/>
+                                        <ComboBox x:Name="CustomDurationUnit" Grid.Column="2" SelectedIndex="0">
+                                            <ComboBoxItem Content="минут"/>
+                                            <ComboBoxItem Content="секунд"/>
+                                        </ComboBox>
+                                        <Button Grid.Column="4" Style="{StaticResource AccentButton}" Content="Применить" Click="CustomDuration_Click"/>
+                                    </Grid>
+                                    <TextBlock x:Name="DurationHint" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="2,6,0,0"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <StackPanel x:Name="SoundTitle" Orientation="Horizontal">
