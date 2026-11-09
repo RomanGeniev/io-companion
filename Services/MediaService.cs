@@ -218,7 +218,8 @@ namespace GraphiteCompanion.Services
         /// find the player's own seek slider in its window (Apple Music exposes "LCDScrubber"
         /// with a RangeValue pattern) and set its value directly. The window must be open,
         /// not minimized to the tray. <paramref name="restoreForeground"/> is the window that
-        /// was in front before (SetValue raises the player's window) — the focus goes back to it.
+        /// was in front before (SetValue raises the player's window) — the focus goes back to it
+        /// and the player's window is pushed back below, so a borderless game never sees it.
         /// </summary>
         private static bool SeekViaUiAutomation(TimeSpan target, TimeSpan duration, TimeSpan before, IntPtr restoreForeground)
         {
@@ -249,20 +250,60 @@ namespace GraphiteCompanion.Services
                             if (Math.Abs(cur.Maximum - duration.TotalSeconds) > Math.Max(5, duration.TotalSeconds * 0.08)) continue;
                             if (Math.Abs(cur.Value - before.TotalSeconds) > 10) continue;
                             rv.SetValue((double)target.TotalSeconds);
-                            if (restoreForeground != IntPtr.Zero) SetForegroundWindow(restoreForeground);
+                            // SetValue raised the player's window (focus and z-order): undo both.
+                            IntPtr player = win.Current.NativeWindowHandle;
+                            if (restoreForeground != IntPtr.Zero && restoreForeground != player)
+                                RestoreForeground(restoreForeground);
+                            // then the z-order: a visible player window would otherwise sit above the game
+                            if (restoreForeground != IntPtr.Zero && restoreForeground != player && IsWindowVisible(player))
+                                SetWindowPos(player, new IntPtr(1) /* HWND_BOTTOM */, 0, 0, 0, 0,
+                                    0x0001 /* SWP_NOSIZE */ | 0x0002 /* SWP_NOMOVE */ | 0x0010 /* SWP_NOACTIVATE */);
                             return true;
                         }
                     }
                     catch { }
                 }
-                if (restoreForeground != IntPtr.Zero) SetForegroundWindow(restoreForeground);
+                if (restoreForeground != IntPtr.Zero) RestoreForeground(restoreForeground);
             }
             catch { }
             return false;
         }
 
+        /// <summary>
+        /// After the player's window stole the foreground, a plain SetForegroundWindow is refused
+        /// (Windows moved the "right to set foreground" to the player's process). Attaching our
+        /// thread to the current foreground thread for a moment gives that right back.
+        /// </summary>
+        private static void RestoreForeground(IntPtr window)
+        {
+            try
+            {
+                if (!SetForegroundWindow(window))
+                {
+                    IntPtr fg = GetForegroundWindow();
+                    if (fg != IntPtr.Zero && fg != window)
+                    {
+                        uint fgThread = GetWindowThreadProcessId(fg, out _);
+                        uint myThread = GetCurrentThreadId();
+                        if (fgThread != 0 && fgThread != myThread)
+                        {
+                            AttachThreadInput(myThread, fgThread, true);
+                            SetForegroundWindow(window);
+                            AttachThreadInput(myThread, fgThread, false);
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
         [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+        [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+        [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+        [DllImport("user32.dll")] private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+        [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
 
         private static async Task Command(Func<MediaSession, Task<bool>> run, byte fallbackKey)
         {

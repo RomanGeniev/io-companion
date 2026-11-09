@@ -31,7 +31,7 @@ namespace GraphiteCompanion.Controls
         private readonly Grid timeRow = new();
         private readonly Button prev = new(), play = new(), next = new();
         private readonly TextBlock playGlyph;
-        private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(250) };
+        private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(100) };
 
         private NowPlaying? state;
         private DateTime stateTime;
@@ -99,6 +99,7 @@ namespace GraphiteCompanion.Controls
             seek.Maximum = 1;
             seek.SmallChange = 5;
             seek.LargeChange = 10;
+            seek.IsMoveToPointEnabled = true;   // click anywhere on the track = jump right there, not a ±10 s step
             seek.Focusable = false;   // arrow keys would snap the thumb back on the next poll
             seek.PreviewMouseLeftButtonDown += (_, e0) =>
             {
@@ -193,8 +194,8 @@ namespace GraphiteCompanion.Controls
 
         private async System.Threading.Tasks.Task Tick()
         {
-            // ask Windows twice a second, move the bar smoothly in between
-            if (++tick % 2 == 0) await Fetch();
+            // ask Windows twice a second, interpolate the bar smoothly in between (10 fps)
+            if (++tick % 5 == 0) await Fetch();
             else ShowPosition();
         }
 

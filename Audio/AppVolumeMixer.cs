@@ -58,13 +58,19 @@ namespace GraphiteCompanion.Audio
             ["io_graphite_2_pro_wireless_audio_center_x64"] = "Audio Center (IO)", ["cs2"] = "Counter-Strike 2",
             ["dota2"] = "Dota 2", ["PBZ"] = "Phantom Blade Zero", ["vlc"] = "VLC", ["YandexMusic"] = "Яндекс Музыка",
             // Apple Music plays audio through its helper process; show the app the user knows
-            ["AMPLibraryAgent"] = "Apple Music",
+            ["AMPLibraryAgent"] = "Apple Music", ["AppleMusic"] = "Apple Music",
+        };
+
+        /// <summary>Helper processes that belong to the main app: their sessions are merged into one row.</summary>
+        private static readonly Dictionary<string, string> MergeInto = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["AMPLibraryAgent"] = "AppleMusic",
         };
 
         /// <summary>The session can belong to a helper process; for the icon, prefer the main app's exe.</summary>
         private static readonly Dictionary<string, string> MainAppExe = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["AMPLibraryAgent"] = "AppleMusic",
+            ["AppleMusic"] = "AppleMusic",
         };
 
         private static string FriendlyTitle(uint pid, string fallback)
@@ -90,6 +96,8 @@ namespace GraphiteCompanion.Audio
                 if (s.State == NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateExpired) continue;
                 string name = s.IsSystemSoundsSession ? "#system" : ProcessName(s.GetProcessID);
                 if (name.Length == 0) continue;
+                // a helper process's session belongs to the main app: one row, one slider, both sessions follow it
+                if (!s.IsSystemSoundsSession && MergeInto.TryGetValue(name, out string? main)) name = main;
                 yield return (s, name);
             }
         }
