@@ -20,7 +20,9 @@ namespace GraphiteCompanion.Controls
     {
         private readonly MainWindow main;
         private readonly StackPanel apps = new();
-        private readonly UniformGrid outputs = new() { Columns = 1 };
+        private readonly Button outputButton = new();
+        private readonly Popup outputPopup = new() { StaysOpen = true, AllowsTransparency = true, Placement = PlacementMode.Bottom, PopupAnimation = PopupAnimation.Fade };
+        private readonly StackPanel outputItems = new();
         private readonly Button replayButton = new(), recordButton = new(), shotButton = new();
         private readonly TextBlock title = new() { FontSize = 22, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
         private readonly TextBlock subtitle = new() { FontSize = 12 };
@@ -156,7 +158,23 @@ namespace GraphiteCompanion.Controls
             left.Children.Add(volRow);
             left.Children.Add(micButton);
             left.Children.Add(Section("КУДА ИДЁТ ЗВУК"));
-            left.Children.Add(outputs);
+            outputButton.SetResourceReference(StyleProperty, "GhostButton");
+            outputButton.Padding = new Thickness(14, 10, 14, 10);
+            outputButton.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+            outputButton.Click += (_, _) =>
+            {
+                if (outputPopup.IsOpen) { outputPopup.IsOpen = false; return; }
+                ((Border)outputPopup.Child).Width = outputButton.ActualWidth;
+                outputPopup.IsOpen = true;
+            };
+            var popupBox = new Border { CornerRadius = new CornerRadius(12), Padding = new Thickness(6, 6, 6, 2), BorderThickness = new Thickness(1), Margin = new Thickness(0, 6, 0, 12), Child = outputItems,
+                                        Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 24, ShadowDepth = 0, Opacity = 0.5 } };
+            popupBox.SetResourceReference(Border.BackgroundProperty, "CardBrush");
+            popupBox.SetResourceReference(Border.BorderBrushProperty, "CardBorderBrush");
+            outputPopup.Child = popupBox;
+            outputPopup.PlacementTarget = outputButton;
+            left.Children.Add(outputButton);
+            left.Children.Add(outputPopup);
 
             // ================= right column: recording + programs
             var recRow = new UniformGrid { Columns = 3 };
@@ -206,11 +224,15 @@ namespace GraphiteCompanion.Controls
             };
             panel.SetResourceReference(Border.BackgroundProperty, "CardBrush");
             panel.SetResourceReference(Border.BorderBrushProperty, "CardBorderBrush");
-            panel.MouseLeftButtonDown += (_, e) => e.Handled = true; // clicks inside don't close
+            panel.MouseLeftButtonDown += (_, e) => { outputPopup.IsOpen = false; e.Handled = true; }; // clicks inside don't close
             Content = new Grid { Children = { panel } };
 
             MouseLeftButtonDown += (_, _) => Close();             // click on the dimmed area
-            KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
+            KeyDown += (_, e) =>
+            {
+                if (e.Key != Key.Escape) return;
+                if (outputPopup.IsOpen) outputPopup.IsOpen = false; else Close();
+            };
             Deactivated += (_, _) => { if (IsVisible) Close(); }; // alt-tab / click into another window
             Closed += (_, _) => main.CompareOff();
         }
@@ -330,31 +352,55 @@ namespace GraphiteCompanion.Controls
 
         private void RefreshOutputs()
         {
-            outputs.Children.Clear();
+            outputItems.Children.Clear();
             List<AudioDeviceInfo> list;
             try { list = AudioDevices.ListActiveOutputs(); } catch { return; }
             string? current = DefaultDevice.Get(0);
+            var now = list.Find(d => d.Id == current);
+
+            // the button shows only where the sound goes now; the others are in the drop-down
+            var row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.Children.Add(Glyph(IsHeadphones(now) ? "\uE7F6" : "\uE7F5", 16));
+            var name = new TextBlock { Text = now != null ? ShortName(now.Name) : "Устройство не выбрано", Margin = new Thickness(12, 0, 0, 0), FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(name, 1);
+            row.Children.Add(name);
+            var chevron = Glyph("\uE70D", 11);
+            chevron.Margin = new Thickness(10, 0, 0, 0);
+            chevron.Opacity = list.Count > 1 ? 1 : 0.35;
+            Grid.SetColumn(chevron, 2);
+            row.Children.Add(chevron);
+            outputButton.Content = row;
+            outputButton.ToolTip = list.Count > 1 ? "Нажмите, чтобы выбрать другое устройство" : "Других устройств вывода нет";
+            outputButton.IsEnabled = list.Count > 1;
+
             foreach (var d in list)
             {
                 var dev = d;
-                var content = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left };
-                content.Children.Add(Glyph(dev.HasCmEq || dev.Name.Contains("Наушники", StringComparison.OrdinalIgnoreCase) ? "" : ""));
-                content.Children.Add(new TextBlock { Text = ShortName(dev.Name), Margin = new Thickness(10, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 340 });
+                var content = new StackPanel { Orientation = Orientation.Horizontal };
+                content.Children.Add(Glyph(IsHeadphones(dev) ? "\uE7F6" : "\uE7F5"));
+                content.Children.Add(new TextBlock { Text = ShortName(dev.Name), Margin = new Thickness(10, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 340, VerticalAlignment = VerticalAlignment.Center });
                 var rb = new RadioButton
                 {
                     GroupName = "OverlayOut", Content = content, IsChecked = dev.Id == current,
-                    Margin = new Thickness(0, 0, 0, 6), ToolTip = dev.Name, HorizontalContentAlignment = HorizontalAlignment.Left,
+                    Margin = new Thickness(0, 0, 0, 4), ToolTip = dev.Name, HorizontalContentAlignment = HorizontalAlignment.Left,
                     Padding = new Thickness(12, 9, 12, 9),
                 };
                 rb.SetResourceReference(StyleProperty, "Segment");
                 rb.Click += (_, _) =>
                 {
-                    if (DefaultDevice.Set(dev.Id)) main.SelectDeviceFromOutside(dev.Id);
+                    outputPopup.IsOpen = false;
+                    if (dev.Id != current && DefaultDevice.Set(dev.Id)) main.SelectDeviceFromOutside(dev.Id);
                     Refresh();
                 };
-                outputs.Children.Add(rb);
+                outputItems.Children.Add(rb);
             }
         }
+
+        private static bool IsHeadphones(AudioDeviceInfo? d) =>
+            d != null && (d.HasCmEq || d.Name.Contains("Наушники", StringComparison.OrdinalIgnoreCase));
 
         private void RefreshApps()
         {
