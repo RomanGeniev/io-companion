@@ -41,7 +41,8 @@ namespace GraphiteCompanion.Services
         private RecordingAudio? audio;
         private Process? bufferProc, recordProc;
         private RecordOptions? opts;
-        private string? recordTemp, recordTarget;
+        private string? recordTemp, recordRoot;
+        private DateTime recordStarted;
         public DateTime RecordingSince { get; private set; }
 
         public Encoder Codec { get; private set; }
@@ -172,7 +173,7 @@ namespace GraphiteCompanion.Services
                 string listFile = Path.Combine(snap, "list.txt");
                 await File.WriteAllTextAsync(listFile, list.ToString());
                 Directory.CreateDirectory(opts.Folder);
-                string target = UniquePath(opts.Folder, title);
+                string target = UniquePath(opts.Folder, title, DateTime.Now);
                 int code = await FfmpegInstaller.RunAsync($"-y -f concat -safe 0 -i \"{listFile}\" -c copy -movflags +faststart \"{target}\"", 120000);
                 if (code != 0 || !File.Exists(target)) throw new IOException("FFmpeg не смог собрать ролик");
                 return target;
@@ -191,8 +192,9 @@ namespace GraphiteCompanion.Services
             opts ??= o;
             EnsureAudio(o);
             Directory.CreateDirectory(o.Folder);
-            recordTarget = UniquePath(o.Folder, title);
-            recordTemp = Path.ChangeExtension(recordTarget, ".recording.mp4");
+            recordRoot = o.Folder;
+            recordStarted = DateTime.Now;
+            recordTemp = Path.ChangeExtension(UniquePath(o.Folder, title, recordStarted), ".recording.mp4");
             string args = Inputs(o) + Encode(o).Replace("-map 0:v", "-map [v]") +
                           $" -movflags +frag_keyframe+empty_moov+default_base_moof \"{recordTemp}\"";
             recordProc = Launch(args, o.SystemSound || o.Microphone, "record.log");
@@ -200,14 +202,16 @@ namespace GraphiteCompanion.Services
         }
 
         /// <summary>Stops and finalises the recording (fragmented → normal mp4); returns the file path.</summary>
-        public async Task<string?> StopRecordingAsync()
+        public async Task<string?> StopRecordingAsync(string game)
         {
             if (recordProc == null) return null;
             Kill(ref recordProc);
             if (!BufferRunning) DropAudio();
-            string? temp = recordTemp, target = recordTarget;
-            recordTemp = recordTarget = null;
-            if (temp == null || target == null || !File.Exists(temp)) return null;
+            string? temp = recordTemp, root = recordRoot;
+            recordTemp = recordRoot = null;
+            if (temp == null || root == null || !File.Exists(temp)) return null;
+            // the folder is chosen now: the game that was really played, not what happened to be in front at the start
+            string target = UniquePath(root, game, recordStarted);
             await Task.Delay(300);
             int code = await FfmpegInstaller.RunAsync($"-y -i \"{temp}\" -c copy -movflags +faststart \"{target}\"", 600000);
             if (code == 0 && File.Exists(target)) { try { File.Delete(temp); } catch { } return target; }
@@ -219,12 +223,38 @@ namespace GraphiteCompanion.Services
 
         // ---------------- helpers ----------------
 
-        private static string UniquePath(string folder, string title)
+        private static string UniquePath(string root, string game, DateTime when)
         {
-            foreach (char c in Path.GetInvalidFileNameChars()) title = title.Replace(c, ' ');
-            string name = $"{title.Trim()} {DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss", CultureInfo.InvariantCulture)}";
-            string path = Path.Combine(folder, name + ".mp4");
-            for (int i = 2; File.Exists(path); i++) path = Path.Combine(folder, $"{name} ({i}).mp4");
+            string name = SafeName(game);
+            string folder = Path.Combine(root, name);
+            Directory.CreateDirectory(folder);
+            string file = $"{name} {when.ToString("yyyy-MM-dd HH-mm-ss", CultureInfo.InvariantCulture)}";
+            string path = Path.Combine(folder, file + ".mp4");
+            for (int i = 2; File.Exists(path); i++) path = Path.Combine(folder, $"{file} ({i}).mp4");
+            return path;
+        }
+
+        public static string SafeName(string s)
+        {
+            foreach (char c in Path.GetInvalidFileNameChars()) s = s.Replace(c, ' ');
+            s = string.Join(" ", s.Split(' ', StringSplitOptions.RemoveEmptyEntries)).Trim().TrimEnd('.');
+            return s.Length == 0 ? "Запись экрана" : s.Length > 60 ? s[..60].Trim() : s;
+        }
+
+        /// <summary>Screenshot of one monitor as PNG in the game's folder (FFmpeg sees games that GDI shows black).</summary>
+        public async Task<string> ScreenshotAsync(RecordOptions o, string game, System.Drawing.Rectangle bounds)
+        {
+            string path = UniquePath(o.Folder, game, DateTime.Now);
+            path = Path.ChangeExtension(path, ".png");
+            if (FfmpegInstaller.Installed)
+            {
+                int code = await FfmpegInstaller.RunAsync(
+                    $"-y -filter_complex \"gfxcapture=hmonitor={(ulong)o.Monitor}:max_framerate=5:capture_cursor=0,hwdownload,format=bgra[v]\" -map [v] -frames:v 1 \"{path}\"", 10000);
+                if (code == 0 && File.Exists(path) && new FileInfo(path).Length > 0) return path;
+            }
+            using var bmp = new System.Drawing.Bitmap(bounds.Width, bounds.Height);
+            using (var g = System.Drawing.Graphics.FromImage(bmp)) g.CopyFromScreen(bounds.Location, System.Drawing.Point.Empty, bounds.Size);
+            bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
             return path;
         }
 

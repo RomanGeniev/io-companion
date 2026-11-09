@@ -715,6 +715,8 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="10"/>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <Button x:Name="SaveReplayButton" Style="{StaticResource AccentButton}" Click="SaveReplay_Click">
                                     <StackPanel Orientation="Horizontal">
@@ -728,7 +730,10 @@
                                         <TextBlock x:Name="RecordText" Text="Начать запись" Margin="8,0,0,0"/>
                                     </StackPanel>
                                 </Button>
-                                <Button Grid.Column="4" Style="{StaticResource GhostButton}" Click="OpenRecFolder_Click" ToolTip="Открыть папку с роликами">
+                                <Button Grid.Column="4" Style="{StaticResource GhostButton}" Click="Screenshot_Click" ToolTip="Сделать скриншот">
+                                    <TextBlock Text="&#xE722;" FontFamily="{StaticResource IconFont}"/>
+                                </Button>
+                                <Button Grid.Column="6" Style="{StaticResource GhostButton}" Click="OpenRecFolder_Click" ToolTip="Открыть папку с роликами">
                                     <TextBlock Text="&#xE838;" FontFamily="{StaticResource IconFont}"/>
                                 </Button>
                             </Grid>

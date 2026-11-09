@@ -30,7 +30,7 @@ namespace GraphiteCompanion
         private readonly ReplayService replay = new();
         private DispatcherTimer? recTimer;
         private bool recBusy;
-        private string replayKey = "Alt + F10", recordKey = "Alt + F9";
+        private string replayKey = "Alt + F10", recordKey = "Alt + F9", shotKey = "Alt + F8";
 
         private static readonly int[] Durations = { 15, 30, 60, 120, 300 };
         private static readonly int[] Heights = { 0, 2160, 1440, 1080, 720 };
@@ -63,10 +63,11 @@ namespace GraphiteCompanion
             const uint A = HotkeyService.Alt, CA = HotkeyService.Ctrl | HotkeyService.Alt;
             replayKey = RegFirst(() => _ = SaveReplay(), (A, 0x79, "Alt + F10"), (CA, 0x79, "Ctrl + Alt + F10"));
             recordKey = RegFirst(() => _ = ToggleRecording(), (A, 0x78, "Alt + F9"), (CA, 0x78, "Ctrl + Alt + F9"));
-            RecHotkeys.Text = $"{replayKey} — сохранить повтор  ·  {recordKey} — начать / остановить запись. Работают и из игры.";
+            shotKey = RegFirst(() => _ = TakeScreenshot(), (A, 0x77, "Alt + F8"), (CA, 0x77, "Ctrl + Alt + F8"));
+            RecHotkeys.Text = $"{replayKey} — сохранить повтор  ·  {recordKey} — начать / остановить запись  ·  {shotKey} — скриншот. Работают и из игры. Файлы раскладываются по папкам игр.";
 
             recTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            recTimer.Tick += (_, _) => UpdateRecStatus();
+            recTimer.Tick += (_, _) => { TrackForeground(); UpdateRecStatus(); };
             recTimer.Start();
 
             if (settings.ReplayEnabled && FfmpegInstaller.Installed) _ = StartReplayBuffer();
@@ -183,19 +184,106 @@ namespace GraphiteCompanion
             UpdateRecStatus();
         }
 
-        /// <summary>Name of the program in front ("Dota 2", "Яндекс Браузер") for the file name.</summary>
-        private static string ForegroundTitle()
+        // ---------------- which game a file belongs to ----------------
+
+        private const string Desktop = "Рабочий стол";
+        private static readonly string[] ShellApps =
+        {
+            "explorer", "ShellExperienceHost", "StartMenuExperienceHost", "SearchHost", "SearchApp",
+            "LockApp", "TextInputHost", "ApplicationFrameHost", "ShellHost", "dwm", "Taskmgr",
+        };
+        private static readonly string[] GenericNames = { "application", "launcher", "game", "unity player" };
+        private readonly Dictionary<uint, string?> appNames = new();
+        private string? lastGame;                              // last real program that was in front (not IO Companion)
+        private string startGame = Desktop;
+        private readonly Dictionary<string, int> recSeconds = new();
+
+        /// <summary>(program name, whether the front window is IO Companion itself). Name is null for the desktop/taskbar.</summary>
+        private (string? name, bool self) ForegroundApp()
         {
             try
             {
                 GetWindowThreadProcessId(GetForegroundWindow(), out uint pid);
-                using var p = Process.GetProcessById((int)pid);
-                if (p.ProcessName.Equals("GraphiteCompanion", StringComparison.OrdinalIgnoreCase)) return "Запись экрана";
-                string? d = p.MainModule?.FileVersionInfo.FileDescription;
-                return string.IsNullOrWhiteSpace(d) ? p.ProcessName : d!;
+                if (pid == 0) return (null, false);
+                if (pid == Environment.ProcessId) return (null, true);
+                if (appNames.TryGetValue(pid, out var cached)) return (cached, false);
+                string? name = null;
+                using (var p = Process.GetProcessById((int)pid))
+                {
+                    if (!ShellApps.Any(s => s.Equals(p.ProcessName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        string? d = null;
+                        try { d = p.MainModule?.FileVersionInfo.FileDescription?.Trim(); } catch { } // protected / elevated games
+                        if (d != null && d.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) d = d[..^4];
+                        name = string.IsNullOrWhiteSpace(d) || GenericNames.Contains(d.ToLowerInvariant()) ? p.ProcessName : d;
+                    }
+                }
+                if (appNames.Count > 64) appNames.Clear();
+                appNames[pid] = name;
+                return (name, false);
             }
-            catch { return "Запись экрана"; }
+            catch { return (null, false); }
         }
+
+        /// <summary>The program a new file belongs to. Pressed from IO Companion itself → the program used just before.</summary>
+        private string CurrentGame()
+        {
+            var (name, self) = ForegroundApp();
+            if (name != null) return name;
+            return self && lastGame != null ? lastGame : Desktop;
+        }
+
+        /// <summary>Once a second: remember the last program and count how long each one was in front during a recording.</summary>
+        private void TrackForeground()
+        {
+            var (name, _) = ForegroundApp();
+            if (name == null) return;
+            lastGame = name;
+            if (replay.Recording) recSeconds[name] = recSeconds.GetValueOrDefault(name) + 1;
+        }
+
+        /// <summary>
+        /// Alt-Tab does not interrupt a recording (it captures the whole monitor) and never splits the file.
+        /// The folder is the program the recording was started in; if it was started on the desktop or in a
+        /// launcher-less moment, the program that was in front the longest.
+        /// </summary>
+        private string GameForRecording()
+        {
+            if (startGame != Desktop || recSeconds.Count == 0) return startGame;
+            return recSeconds.MaxBy(kv => kv.Value).Key;
+        }
+
+        private bool shotBusy;
+
+        public async System.Threading.Tasks.Task TakeScreenshot()
+        {
+            if (shotBusy) return;
+            shotBusy = true;
+            try
+            {
+                var o = BuildOptions();
+                var bounds = (MonitorCombo.SelectedItem as MonitorItem)?.Screen.Bounds ?? WF.Screen.PrimaryScreen!.Bounds;
+                var hwnd = GetForegroundWindow();
+                GetWindowThreadProcessId(hwnd, out uint pid);
+                if (hwnd != IntPtr.Zero && pid != Environment.ProcessId)
+                {
+                    // the monitor the game is on, not necessarily the one selected for recording
+                    var screen = WF.Screen.FromHandle(hwnd);
+                    bounds = screen.Bounds;
+                    o.Monitor = MonitorFromPoint(new System.Drawing.Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2), 2);
+                }
+                string file = await replay.ScreenshotAsync(o, CurrentGame(), bounds);
+                NotifyChange("Скриншот сохранён", "", Path.GetFileName(file));
+            }
+            catch (Exception ex)
+            {
+                SettingsStore.LogError(ex);
+                NotifyChange("Не удалось сделать скриншот", "", ex.Message);
+            }
+            finally { shotBusy = false; }
+        }
+
+        private void Screenshot_Click(object sender, RoutedEventArgs e) => _ = TakeScreenshot();
 
         public async System.Threading.Tasks.Task SaveReplay()
         {
@@ -209,7 +297,7 @@ namespace GraphiteCompanion
             SaveReplayText.Text = "Сохраняю…";
             try
             {
-                string file = await replay.SaveReplayAsync(ForegroundTitle());
+                string file = await replay.SaveReplayAsync(CurrentGame());
                 NotifyChange("Повтор сохранён", "", Path.GetFileName(file));
             }
             catch (Exception ex)
@@ -234,13 +322,15 @@ namespace GraphiteCompanion
                 if (replay.Recording)
                 {
                     RecordText.Text = "Сохраняю…";
-                    string? file = await replay.StopRecordingAsync();
+                    string? file = await replay.StopRecordingAsync(GameForRecording());
                     NotifyChange("Запись сохранена", "", file != null ? Path.GetFileName(file) : null);
                 }
                 else
                 {
                     if (!await EnsureRecorderReady()) return;
-                    replay.StartRecording(BuildOptions(), ForegroundTitle());
+                    startGame = CurrentGame();
+                    recSeconds.Clear();
+                    replay.StartRecording(BuildOptions(), startGame);
                     NotifyChange("Запись началась", "", $"{recordKey} — остановить");
                 }
             }

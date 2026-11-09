@@ -21,7 +21,7 @@ namespace GraphiteCompanion.Controls
         private readonly MainWindow main;
         private readonly StackPanel apps = new();
         private readonly UniformGrid outputs = new();
-        private readonly Button replayButton = new(), recordButton = new();
+        private readonly Button replayButton = new(), recordButton = new(), shotButton = new();
         private readonly TextBlock title = new() { FontSize = 20, FontWeight = FontWeights.SemiBold };
         private readonly TextBlock subtitle = new() { FontSize = 12 };
         private readonly RadioButton[] modes = new RadioButton[3];
@@ -104,15 +104,20 @@ namespace GraphiteCompanion.Controls
             row.Children.Add(micButton);
 
             // ---- replay / recording
-            var recRow = new UniformGrid { Columns = 2, Margin = new Thickness(0, 12, 0, 0) };
+            var recRow = new UniformGrid { Columns = 3, Margin = new Thickness(0, 12, 0, 0) };
             replayButton.SetResourceReference(StyleProperty, "GhostButton");
             replayButton.Margin = new Thickness(0, 0, 4, 0);
             replayButton.Click += async (_, _) => { Close(); await main.SaveReplay(); };
             recordButton.SetResourceReference(StyleProperty, "GhostButton");
-            recordButton.Margin = new Thickness(4, 0, 0, 0);
+            recordButton.Margin = new Thickness(4, 0, 4, 0);
             recordButton.Click += async (_, _) => { Close(); await main.ToggleRecording(); };
             recRow.Children.Add(replayButton);
+            shotButton.SetResourceReference(StyleProperty, "GhostButton");
+            shotButton.Margin = new Thickness(4, 0, 0, 0);
+            shotButton.Content = IconText("", "Скриншот");
+            shotButton.Click += async (_, _) => { Close(); await main.TakeScreenshot(); };
             recRow.Children.Add(recordButton);
+            recRow.Children.Add(shotButton);
             row.Tag = recRow; // added to the panel below
 
             // ---- device volume
