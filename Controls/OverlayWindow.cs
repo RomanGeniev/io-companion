@@ -210,6 +210,7 @@ namespace GraphiteCompanion.Controls
 
             var content2 = new StackPanel();
             content2.Children.Add(header);
+            content2.Children.Add(new NowPlayingCard(main));
             content2.Children.Add(columns);
             content2.Children.Add(footer);
 
