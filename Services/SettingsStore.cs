@@ -73,6 +73,17 @@ namespace GraphiteCompanion.Services
         /// <summary>Device id → its own mode / earpads / preset.</summary>
         public Dictionary<string, DeviceProfile> DeviceProfiles { get; set; } = new();
 
+        // screen recording / replays
+        public bool ReplayEnabled { get; set; }
+        public string? ReplayFolder { get; set; }
+        public int ReplaySeconds { get; set; } = 60;
+        public int RecordHeight { get; set; }          // 0 = as on screen, else 2160/1440/1080/720
+        public int RecordFps { get; set; } = 60;
+        public int RecordQuality { get; set; } = 1;    // 0 low, 1 medium, 2 high
+        public string? RecordMonitor { get; set; }     // Screen.DeviceName, null = primary
+        public bool RecordSystemSound { get; set; } = true;
+        public bool RecordMicrophone { get; set; }
+
         public string Theme { get; set; } = "Dark";
         public string Accent { get; set; } = "Violet";
         public bool FullscreenMovies { get; set; } = true;

@@ -1,0 +1,305 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading.Tasks;
+using GraphiteCompanion.Audio;
+
+namespace GraphiteCompanion.Services
+{
+    public sealed class RecordOptions
+    {
+        public IntPtr Monitor;            // HMONITOR to capture
+        public int Width, Height;         // 0 = native
+        public int Fps = 60;
+        public int Quality = 1;           // 0 low, 1 medium, 2 high
+        public bool SystemSound = true;
+        public bool Microphone;
+        public int ReplaySeconds = 60;
+        public string Folder = "";
+    }
+
+    /// <summary>
+    /// Screen recording through FFmpeg with the GPU's own encoder (NVENC / AMF / Quick Sync, x264 as last resort).
+    /// Replay buffer: FFmpeg keeps writing short segments into a ring in %LOCALAPPDATA%; saving copies the last
+    /// N seconds and joins them into one mp4 without re-encoding. Manual recording: a second FFmpeg writes a
+    /// fragmented mp4 straight into the target folder (safe even if the PC crashes), finalised on stop.
+    /// </summary>
+    public sealed class ReplayService : IDisposable
+    {
+        public enum Encoder { None, Nvenc, Amf, Qsv, X264 }
+
+        private const int SegmentSeconds = 1;
+        private static readonly string RingDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GraphiteCompanion", "replay-buffer");
+
+        private readonly JobObject job = new();
+        private RecordingAudio? audio;
+        private Process? bufferProc, recordProc;
+        private RecordOptions? opts;
+        private string? recordTemp, recordTarget;
+        public DateTime RecordingSince { get; private set; }
+
+        public Encoder Codec { get; private set; }
+        public bool BufferRunning => bufferProc is { HasExited: false };
+        public bool Recording => recordProc is { HasExited: false };
+        public string? LastError { get; private set; }
+
+        public static string EncoderName(Encoder e) => e switch
+        {
+            Encoder.Nvenc => "NVIDIA NVENC",
+            Encoder.Amf => "AMD AMF",
+            Encoder.Qsv => "Intel Quick Sync",
+            Encoder.X264 => "процессор (x264)",
+            _ => "—",
+        };
+
+        /// <summary>Picks the first hardware encoder that actually works on this PC.</summary>
+        public async Task<Encoder> DetectEncoderAsync()
+        {
+            if (Codec != Encoder.None) return Codec;
+            foreach (var (enc, name) in new[] { (Encoder.Nvenc, "h264_nvenc"), (Encoder.Amf, "h264_amf"), (Encoder.Qsv, "h264_qsv") })
+            {
+                if (await FfmpegInstaller.RunAsync($"-f lavfi -i color=c=black:s=640x360:r=30 -frames:v 5 -c:v {name} -f null -") == 0)
+                    return Codec = enc;
+            }
+            return Codec = Encoder.X264;
+        }
+
+        // ---------------- ffmpeg command ----------------
+
+        private string VideoInput(RecordOptions o)
+        {
+            var sb = new StringBuilder($"gfxcapture=hmonitor={(ulong)o.Monitor}:max_framerate={o.Fps}:capture_cursor=1");
+            if (o.Width > 0) sb.Append($":width={o.Width}:height={o.Height}:resize_mode=scale_aspect");
+            // GPU frames go straight into NVENC / AMF; Quick Sync and x264 need them in normal memory
+            if (Codec is Encoder.Qsv or Encoder.X264) sb.Append(",hwdownload,format=bgra");
+            return sb.ToString();
+        }
+
+        private string Encode(RecordOptions o)
+        {
+            int[] cq = { 28, 23, 19 };            // low / medium / high
+            int q = cq[Math.Clamp(o.Quality, 0, 2)];
+            string keys = $"-g {o.Fps} -force_key_frames expr:gte(t,n_forced*{SegmentSeconds})";
+            string v = Codec switch
+            {
+                Encoder.Nvenc => $"-c:v h264_nvenc -preset p4 -tune hq -rc vbr -cq {q} -b:v 0",
+                Encoder.Amf => $"-c:v h264_amf -quality balanced -rc cqp -qp_i {q} -qp_p {q + 2}",
+                Encoder.Qsv => $"-c:v h264_qsv -preset veryfast -global_quality {q}",
+                _ => $"-c:v libx264 -preset veryfast -crf {q + 2} -pix_fmt yuv420p",
+            };
+            string a = o.SystemSound || o.Microphone ? "-map 0:a -c:a aac -b:a 160k" : "";
+            return $"-map 0:v {v} {keys} {a}";
+        }
+
+        private string Inputs(RecordOptions o) =>
+            $"-filter_complex \"{VideoInput(o)}[v]\" " +
+            (o.SystemSound || o.Microphone ? "-f s16le -ar 48000 -ac 2 -i pipe:0 " : "");
+
+        private Process Launch(string args, bool withAudio, string logName)
+        {
+            var psi = new ProcessStartInfo(FfmpegInstaller.ExePath, "-hide_banner -loglevel warning -stats_period 2 -y " + args)
+            {
+                CreateNoWindow = true, UseShellExecute = false,
+                RedirectStandardInput = true, RedirectStandardError = true, RedirectStandardOutput = true,
+            };
+            var p = Process.Start(psi)!;
+            job.Add(p); // ffmpeg dies together with IO Companion, even on a crash
+            try { p.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
+            string log = Path.Combine(SettingsStore.Folder, logName);
+            p.ErrorDataReceived += (_, e) => { if (e.Data != null) { LastError = e.Data; try { File.AppendAllText(log, e.Data + "\n"); } catch { } } };
+            p.BeginErrorReadLine();
+            p.OutputDataReceived += (_, _) => { };
+            p.BeginOutputReadLine();
+            if (withAudio) audio?.AddOutput(p.StandardInput.BaseStream);
+            return p;
+        }
+
+        private void EnsureAudio(RecordOptions o)
+        {
+            if (audio == null && (o.SystemSound || o.Microphone)) audio = new RecordingAudio(o.SystemSound, o.Microphone);
+        }
+
+        // ---------------- replay buffer ----------------
+
+        public void StartBuffer(RecordOptions o)
+        {
+            StopBuffer();
+            opts = o;
+            Directory.CreateDirectory(RingDir);
+            foreach (var f in Directory.GetFiles(RingDir)) { try { File.Delete(f); } catch { } }
+            EnsureAudio(o);
+            int wrap = o.ReplaySeconds / SegmentSeconds + 3;
+            string args = Inputs(o) + Encode(o).Replace("-map 0:v", "-map [v]") +
+                          $" -f segment -segment_time {SegmentSeconds} -segment_format mpegts -segment_wrap {wrap}" +
+                          $" -reset_timestamps 1 -flush_packets 1 \"{Path.Combine(RingDir, "seg%04d.ts")}\"";
+            bufferProc = Launch(args, o.SystemSound || o.Microphone, "replay.log");
+        }
+
+        public void StopBuffer()
+        {
+            Kill(ref bufferProc);
+            if (!Recording) DropAudio();
+        }
+
+        /// <summary>Saves the last N seconds as an mp4; returns the file path.</summary>
+        public async Task<string> SaveReplayAsync(string title)
+        {
+            if (opts == null || !BufferRunning) throw new InvalidOperationException("Повторы не запущены");
+            var segs = new DirectoryInfo(RingDir).GetFiles("seg*.ts")
+                .Where(f => f.Length > 0).OrderBy(f => f.LastWriteTimeUtc).ToList();
+            int need = (int)Math.Ceiling(opts.ReplaySeconds / (double)SegmentSeconds) + 1;
+            var take = segs.Skip(Math.Max(0, segs.Count - need)).ToList();
+            if (take.Count == 0) throw new InvalidOperationException("Буфер ещё пуст — подождите пару секунд");
+
+            // copy first: FFmpeg keeps overwriting the ring while we join
+            string snap = Path.Combine(Path.GetTempPath(), "IOCompanionReplay-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(snap);
+            try
+            {
+                var list = new StringBuilder();
+                for (int i = 0; i < take.Count; i++)
+                {
+                    string dst = Path.Combine(snap, $"p{i:0000}.ts");
+                    File.Copy(take[i].FullName, dst, true);
+                    list.Append("file '").Append(dst.Replace('\\', '/').Replace("'", "'\\''")).Append("'\n");
+                }
+                string listFile = Path.Combine(snap, "list.txt");
+                await File.WriteAllTextAsync(listFile, list.ToString());
+                Directory.CreateDirectory(opts.Folder);
+                string target = UniquePath(opts.Folder, title);
+                int code = await FfmpegInstaller.RunAsync($"-y -f concat -safe 0 -i \"{listFile}\" -c copy -movflags +faststart \"{target}\"", 120000);
+                if (code != 0 || !File.Exists(target)) throw new IOException("FFmpeg не смог собрать ролик");
+                return target;
+            }
+            finally
+            {
+                try { Directory.Delete(snap, true); } catch { }
+            }
+        }
+
+        // ---------------- manual recording ----------------
+
+        public void StartRecording(RecordOptions o, string title)
+        {
+            if (Recording) return;
+            opts ??= o;
+            EnsureAudio(o);
+            Directory.CreateDirectory(o.Folder);
+            recordTarget = UniquePath(o.Folder, title);
+            recordTemp = Path.ChangeExtension(recordTarget, ".recording.mp4");
+            string args = Inputs(o) + Encode(o).Replace("-map 0:v", "-map [v]") +
+                          $" -movflags +frag_keyframe+empty_moov+default_base_moof \"{recordTemp}\"";
+            recordProc = Launch(args, o.SystemSound || o.Microphone, "record.log");
+            RecordingSince = DateTime.Now;
+        }
+
+        /// <summary>Stops and finalises the recording (fragmented → normal mp4); returns the file path.</summary>
+        public async Task<string?> StopRecordingAsync()
+        {
+            if (recordProc == null) return null;
+            Kill(ref recordProc);
+            if (!BufferRunning) DropAudio();
+            string? temp = recordTemp, target = recordTarget;
+            recordTemp = recordTarget = null;
+            if (temp == null || target == null || !File.Exists(temp)) return null;
+            await Task.Delay(300);
+            int code = await FfmpegInstaller.RunAsync($"-y -i \"{temp}\" -c copy -movflags +faststart \"{target}\"", 600000);
+            if (code == 0 && File.Exists(target)) { try { File.Delete(temp); } catch { } return target; }
+            // keep the fragmented file - it still plays everywhere
+            string fallback = Path.ChangeExtension(target, ".mp4");
+            try { File.Move(temp, fallback, true); } catch { fallback = temp; }
+            return fallback;
+        }
+
+        // ---------------- helpers ----------------
+
+        private static string UniquePath(string folder, string title)
+        {
+            foreach (char c in Path.GetInvalidFileNameChars()) title = title.Replace(c, ' ');
+            string name = $"{title.Trim()} {DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss", CultureInfo.InvariantCulture)}";
+            string path = Path.Combine(folder, name + ".mp4");
+            for (int i = 2; File.Exists(path); i++) path = Path.Combine(folder, $"{name} ({i}).mp4");
+            return path;
+        }
+
+        private void Kill(ref Process? p)
+        {
+            var proc = p;
+            p = null;
+            if (proc == null) return;
+            try { audio?.RemoveOutput(proc.StandardInput.BaseStream); } catch { }
+            try
+            {
+                if (!proc.HasExited)
+                {
+                    // ask nicely first so the last fragment is written, then force
+                    try { proc.StandardInput.Close(); } catch { }
+                    if (!proc.WaitForExit(1500)) proc.Kill(true);
+                }
+            }
+            catch { }
+            proc.Dispose();
+        }
+
+        private void DropAudio()
+        {
+            audio?.Dispose();
+            audio = null;
+        }
+
+        /// <summary>Disk space the ring currently uses.</summary>
+        public static long BufferBytes()
+        {
+            try { return Directory.Exists(RingDir) ? new DirectoryInfo(RingDir).GetFiles().Sum(f => f.Length) : 0; }
+            catch { return 0; }
+        }
+
+        public void Dispose()
+        {
+            StopBuffer();
+            Kill(ref recordProc);
+            DropAudio();
+            job.Dispose();
+            try { if (Directory.Exists(RingDir)) Directory.Delete(RingDir, true); } catch { }
+        }
+    }
+
+    /// <summary>Windows job object: child processes are killed when IO Companion exits for any reason.</summary>
+    internal sealed class JobObject : IDisposable
+    {
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr CreateJobObject(IntPtr a, string? name);
+        [DllImport("kernel32.dll")] private static extern bool SetInformationJobObject(IntPtr job, int cls, ref Extended info, int size);
+        [DllImport("kernel32.dll")] private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+        [DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr h);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Basic { public long a, b; public uint LimitFlags; public UIntPtr c, d; public uint e; public UIntPtr f; public uint g, h; }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Io { public ulong a, b, c, d, e, f; }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Extended { public Basic Basic; public Io Io; public UIntPtr p1, p2, p3, p4; }
+
+        private IntPtr handle;
+
+        public JobObject()
+        {
+            handle = CreateJobObject(IntPtr.Zero, null);
+            var info = new Extended { Basic = new Basic { LimitFlags = 0x2000 } }; // KILL_ON_JOB_CLOSE
+            SetInformationJobObject(handle, 9, ref info, Marshal.SizeOf<Extended>());
+        }
+
+        public void Add(Process p) { try { AssignProcessToJobObject(handle, p.Handle); } catch { } }
+
+        public void Dispose()
+        {
+            if (handle != IntPtr.Zero) CloseHandle(handle);
+            handle = IntPtr.Zero;
+        }
+    }
+}

@@ -38,6 +38,7 @@ namespace GraphiteCompanion
             InitUpdates();
             InitDriver();
             InitFun();
+            InitRecord();
             UpdateBrand();
             UpdateMeters();
         }
@@ -46,6 +47,8 @@ namespace GraphiteCompanion
         {
             visualTimer?.Stop();
             DisposeFun();
+            recTimer?.Stop();
+            replay.Dispose();
             analyzer.Dispose();
             micMeter.Dispose();
         }

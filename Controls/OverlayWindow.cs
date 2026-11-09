@@ -21,6 +21,7 @@ namespace GraphiteCompanion.Controls
         private readonly MainWindow main;
         private readonly StackPanel apps = new();
         private readonly UniformGrid outputs = new();
+        private readonly Button replayButton = new(), recordButton = new();
         private readonly TextBlock title = new() { FontSize = 20, FontWeight = FontWeights.SemiBold };
         private readonly TextBlock subtitle = new() { FontSize = 12 };
         private readonly RadioButton[] modes = new RadioButton[3];
@@ -102,6 +103,18 @@ namespace GraphiteCompanion.Controls
             Grid.SetColumn(micButton, 2);
             row.Children.Add(micButton);
 
+            // ---- replay / recording
+            var recRow = new UniformGrid { Columns = 2, Margin = new Thickness(0, 12, 0, 0) };
+            replayButton.SetResourceReference(StyleProperty, "GhostButton");
+            replayButton.Margin = new Thickness(0, 0, 4, 0);
+            replayButton.Click += async (_, _) => { Close(); await main.SaveReplay(); };
+            recordButton.SetResourceReference(StyleProperty, "GhostButton");
+            recordButton.Margin = new Thickness(4, 0, 0, 0);
+            recordButton.Click += async (_, _) => { Close(); await main.ToggleRecording(); };
+            recRow.Children.Add(replayButton);
+            recRow.Children.Add(recordButton);
+            row.Tag = recRow; // added to the panel below
+
             // ---- device volume
             var volRow = new Grid { Margin = new Thickness(0, 16, 0, 0) };
             volRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -138,7 +151,7 @@ namespace GraphiteCompanion.Controls
             outputs.Columns = 2;
 
             var content2 = new StackPanel();
-            foreach (var el in new UIElement[] { header, outTitle, outputs, modeBox, row, volRow, appsTitle, appsScroll, hint }) content2.Children.Add(el);
+            foreach (var el in new UIElement[] { header, outTitle, outputs, modeBox, row, (UIElement)row.Tag, volRow, appsTitle, appsScroll, hint }) content2.Children.Add(el);
 
             panel = new Border
             {
@@ -206,6 +219,9 @@ namespace GraphiteCompanion.Controls
             micButton.Visibility = s.HasMic ? Visibility.Visible : Visibility.Collapsed;
             micText.Text = s.MicMuted ? "Микрофон выкл." : "Микрофон вкл.";
             micButton.SetResourceReference(ForegroundProperty, s.MicMuted ? "MutedFgBrush" : "TextBrush");
+            replayButton.Content = IconText("", main.ReplayActive ? "Сохранить повтор" : "Повторы выключены");
+            replayButton.IsEnabled = main.ReplayActive;
+            recordButton.Content = IconText(main.RecordingActive ? "" : "", main.RecordingActive ? "Остановить запись" : "Начать запись");
             loading = false;
             RefreshOutputs();
             RefreshApps();

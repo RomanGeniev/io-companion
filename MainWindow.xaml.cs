@@ -382,10 +382,11 @@ namespace GraphiteCompanion
             PageMic.Visibility = tab == "Mic" ? Visibility.Visible : Visibility.Collapsed;
             PageAuto.Visibility = tab == "Auto" ? Visibility.Visible : Visibility.Collapsed;
             PageMixer.Visibility = tab == "Mixer" ? Visibility.Visible : Visibility.Collapsed;
+            PageRecord.Visibility = tab == "Record" ? Visibility.Visible : Visibility.Collapsed;
             if (tab == "Mic") UpdateNrCard();
             if (tab == "Mixer") RefreshMixer();
             if (initialized)
-                AnimatePage(tab switch { "Eq" => PageEq, "Effects" => PageEffects, "Mic" => PageMic, "Mixer" => PageMixer, _ => PageAuto });
+                AnimatePage(tab switch { "Eq" => PageEq, "Effects" => PageEffects, "Mic" => PageMic, "Mixer" => PageMixer, "Record" => PageRecord, _ => PageAuto });
             if (tab == "Eq") Dispatcher.BeginInvoke(new Action(DrawCurve), DispatcherPriority.Loaded);
             UpdateMeters();
         }

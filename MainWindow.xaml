@@ -258,34 +258,40 @@
             <Border Grid.Row="1" Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4"
                     HorizontalAlignment="Left" Margin="0,0,0,14">
                 <StackPanel Orientation="Horizontal">
-                    <RadioButton x:Name="TabEq" GroupName="Tab" Style="{StaticResource Segment}" Width="150" Tag="Eq" Checked="Tab_Checked">
+                    <RadioButton x:Name="TabEq" GroupName="Tab" Style="{StaticResource Segment}" Width="126" Tag="Eq" Checked="Tab_Checked">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE9E9;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
                             <TextBlock Text="Эквалайзер" Margin="8,0,0,0"/>
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="TabEffects" GroupName="Tab" Style="{StaticResource Segment}" Width="150" Tag="Effects" Checked="Tab_Checked">
+                    <RadioButton x:Name="TabEffects" GroupName="Tab" Style="{StaticResource Segment}" Width="126" Tag="Effects" Checked="Tab_Checked">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE909;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
                             <TextBlock Text="Эффекты" Margin="8,0,0,0"/>
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="TabMic" GroupName="Tab" Style="{StaticResource Segment}" Width="150" Tag="Mic" Checked="Tab_Checked">
+                    <RadioButton x:Name="TabMic" GroupName="Tab" Style="{StaticResource Segment}" Width="126" Tag="Mic" Checked="Tab_Checked">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE720;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
                             <TextBlock Text="Микрофон" Margin="8,0,0,0"/>
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="TabAuto" GroupName="Tab" Style="{StaticResource Segment}" Width="150" Tag="Auto" Checked="Tab_Checked">
+                    <RadioButton x:Name="TabAuto" GroupName="Tab" Style="{StaticResource Segment}" Width="126" Tag="Auto" Checked="Tab_Checked">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE945;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
                             <TextBlock Text="Авто" Margin="8,0,0,0"/>
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="TabMixer" GroupName="Tab" Style="{StaticResource Segment}" Width="150" Tag="Mixer" Checked="Tab_Checked">
+                    <RadioButton x:Name="TabMixer" GroupName="Tab" Style="{StaticResource Segment}" Width="126" Tag="Mixer" Checked="Tab_Checked">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE9F5;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
                             <TextBlock Text="Микшер" Margin="8,0,0,0"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="TabRecord" GroupName="Tab" Style="{StaticResource Segment}" Width="126" Tag="Record" Checked="Tab_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE714;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
+                            <TextBlock Text="Запись" Margin="8,0,0,0"/>
                         </StackPanel>
                     </RadioButton>
                 </StackPanel>
@@ -683,6 +689,116 @@
                                     <TextBlock Text="Вернуть список по умолчанию" Margin="8,0,0,0"/>
                                 </StackPanel>
                             </Button>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ===== Page: screen recording / replays ===== -->
+            <ScrollViewer x:Name="PageRecord" Grid.Row="2" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <!-- status + actions -->
+                    <Border Style="{StaticResource Card}" Padding="20,18">
+                        <StackPanel>
+                            <Grid>
+                                <StackPanel Margin="0,0,80,0">
+                                    <TextBlock Text="Повторы и запись экрана" FontSize="19" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="RecStatus" Margin="0,3,0,0" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <CheckBox x:Name="ReplaySwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                          Click="ReplaySwitch_Click" ToolTip="Постоянно держать последние секунды, чтобы сохранить их одной клавишей"/>
+                            </Grid>
+                            <Grid Margin="0,16,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="SaveReplayButton" Style="{StaticResource AccentButton}" Click="SaveReplay_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE74E;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="SaveReplayText" Text="Сохранить повтор" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="RecordButton" Grid.Column="2" Style="{StaticResource GhostButton}" Click="Record_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse x:Name="RecordDot" Width="10" Height="10" Fill="#FF4860" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="RecordText" Text="Начать запись" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button Grid.Column="4" Style="{StaticResource GhostButton}" Click="OpenRecFolder_Click" ToolTip="Открыть папку с роликами">
+                                    <TextBlock Text="&#xE838;" FontFamily="{StaticResource IconFont}"/>
+                                </Button>
+                            </Grid>
+                            <TextBlock x:Name="RecHotkeys" Margin="2,12,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- settings -->
+                    <Border Style="{StaticResource Card}" Padding="20,18">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="ДЛИТЕЛЬНОСТЬ ПОВТОРА"/>
+                            <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4">
+                                <UniformGrid x:Name="DurationGrid" Columns="5"/>
+                            </Border>
+
+                            <TextBlock Style="{StaticResource CardTitle}" Text="РАЗРЕШЕНИЕ" Margin="0,16,0,10"/>
+                            <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4">
+                                <UniformGrid x:Name="ResolutionGrid" Columns="5"/>
+                            </Border>
+
+                            <Grid Margin="0,16,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource CardTitle}" Text="КАДРОВ В СЕКУНДУ"/>
+                                    <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4">
+                                        <UniformGrid x:Name="FpsGrid" Columns="3"/>
+                                    </Border>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Style="{StaticResource CardTitle}" Text="КАЧЕСТВО"/>
+                                    <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4">
+                                        <UniformGrid x:Name="QualityGrid" Columns="3"/>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Margin="0,16,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource CardTitle}" Text="МОНИТОР"/>
+                                    <ComboBox x:Name="MonitorCombo" DisplayMemberPath="Label" SelectionChanged="RecSetting_Changed"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Style="{StaticResource CardTitle}" Text="ЗВУК"/>
+                                    <CheckBox x:Name="RecSystemSwitch" Style="{StaticResource Switch}" Content="Звук компьютера" Click="RecSetting_Changed"/>
+                                    <CheckBox x:Name="RecMicSwitch" Style="{StaticResource Switch}" Content="Микрофон" Click="RecSetting_Changed"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Style="{StaticResource CardTitle}" Text="ПАПКА ДЛЯ РОЛИКОВ" Margin="0,16,0,8"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Background="{DynamicResource InsetBrush}" CornerRadius="8" Padding="12,8">
+                                    <TextBlock x:Name="RecFolderText" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                </Border>
+                                <Button Grid.Column="2" Style="{StaticResource GhostButton}" Content="Выбрать…" Click="ChooseRecFolder_Click"/>
+                            </Grid>
+                            <TextBlock x:Name="RecInfo" Margin="2,14,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
