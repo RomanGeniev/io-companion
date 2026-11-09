@@ -93,7 +93,7 @@ namespace GraphiteCompanion.Audio
                 foreach (var id in root.GetSubKeyNames())
                 {
                     using var k = root.OpenSubKey(id);
-                    if (k?.GetValue("FriendlyName") is string n && n.Contains("Equalizer APO", StringComparison.OrdinalIgnoreCase))
+                    if (k?.GetValue("FriendlyName") is string n && n.Replace(" ", "").Contains("EqualizerAPO", StringComparison.OrdinalIgnoreCase))
                         set.Add(id);
                 }
             }

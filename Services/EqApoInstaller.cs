@@ -69,8 +69,14 @@ namespace GraphiteCompanion.Services
         public static Task<bool> InstallAsync(string setupPath)
         {
             string Q(string s) => "'" + s.Replace("'", "''") + "'";
+            // Equalizer APO's Qt tools look for their plugins relative to the CURRENT directory.
+            // An elevated PowerShell starts in System32, so the Device Selector that setup opens would fail
+            // with "no Qt platform plugin". Run setup from the install folder instead.
+            string apoDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "EqualizerAPO");
             return RunElevatedAsync(
-                $"$p = Start-Process -FilePath {Q(setupPath)} -ArgumentList '/S' -Wait -PassThru\n" +
+                $"New-Item -ItemType Directory -Force -Path {Q(apoDir)} | Out-Null\n" +
+                $"Set-Location -LiteralPath {Q(apoDir)}\n" +
+                $"$p = Start-Process -FilePath {Q(setupPath)} -ArgumentList '/S' -WorkingDirectory {Q(apoDir)} -Wait -PassThru\n" +
                 GrantConfigAccess +
                 "exit $p.ExitCode\n");
         }
@@ -81,7 +87,9 @@ namespace GraphiteCompanion.Services
             string? tool = EqApoController.DeviceSelectorPath;
             if (tool == null) return Task.FromResult(false);
             return RunElevatedAsync(
-                $"Start-Process -FilePath '{tool.Replace("'", "''")}' -Wait\n" + GrantConfigAccess + "exit 0\n");
+                $"Set-Location -LiteralPath '{Path.GetDirectoryName(tool)!.Replace("'", "''")}'\n" +
+                $"Start-Process -FilePath '{tool.Replace("'", "''")}' -WorkingDirectory '{Path.GetDirectoryName(tool)!.Replace("'", "''")}' -Wait\n" +
+                GrantConfigAccess + "exit 0\n");
         }
 
         public static void Reboot() =>
