@@ -13,6 +13,7 @@ namespace GraphiteCompanion.Audio
         public int Volume { get; set; }              // 0..100
         public bool Muted { get; set; }
         public bool IsSystemSounds { get; init; }
+        public string? ExePath { get; init; }        // for the program icon
     }
 
     /// <summary>Per-program volume on an output device (Windows audio sessions).</summary>
@@ -24,8 +25,26 @@ namespace GraphiteCompanion.Audio
             catch { return ""; }
         }
 
+        private static string? ExePathOf(uint pid)
+        {
+            try { using var p = Process.GetProcessById((int)pid); return p.MainModule?.FileName; }
+            catch { return null; } // e.g. a program running as administrator
+        }
+
+        /// <summary>Clear names for common programs whose own description is odd ("nvcontainer", "Yandex with voice assistant Alice").</summary>
+        private static readonly Dictionary<string, string> KnownNames = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["browser"] = "Яндекс Браузер", ["chrome"] = "Google Chrome", ["msedge"] = "Microsoft Edge",
+            ["firefox"] = "Firefox", ["opera"] = "Opera", ["opera_gx"] = "Opera GX",
+            ["Discord"] = "Discord", ["Telegram"] = "Telegram", ["Spotify"] = "Spotify",
+            ["steam"] = "Steam", ["steamwebhelper"] = "Steam", ["nvcontainer"] = "NVIDIA (оверлей / ShadowPlay)",
+            ["io_graphite_2_pro_wireless_audio_center_x64"] = "Audio Center (IO)", ["cs2"] = "Counter-Strike 2",
+            ["dota2"] = "Dota 2", ["PBZ"] = "Phantom Blade Zero", ["vlc"] = "VLC", ["YandexMusic"] = "Яндекс Музыка",
+        };
+
         private static string FriendlyTitle(uint pid, string fallback)
         {
+            if (KnownNames.TryGetValue(fallback, out var known)) return known;
             try
             {
                 using var p = Process.GetProcessById((int)pid);
@@ -63,6 +82,7 @@ namespace GraphiteCompanion.Audio
                     Process = name,
                     IsSystemSounds = s.IsSystemSoundsSession,
                     Title = s.IsSystemSoundsSession ? "Системные звуки" : FriendlyTitle(s.GetProcessID, name),
+                    ExePath = s.IsSystemSoundsSession ? null : ExePathOf(s.GetProcessID),
                     Volume = (int)Math.Round(vol.Volume * 100),
                     Muted = vol.Mute,
                 };

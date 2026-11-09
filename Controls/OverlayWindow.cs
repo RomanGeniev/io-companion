@@ -271,16 +271,27 @@ namespace GraphiteCompanion.Controls
             foreach (var app in list)
             {
                 var g = new Grid { Margin = new Thickness(0, 0, 0, 10) };
-                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(170) });
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
                 g.ColumnDefinitions.Add(new ColumnDefinition());
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(44) });
-                g.Children.Add(new TextBlock { Text = app.Title, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
+                g.Children.Add(AppIcons.Tile(app.ExePath, app.IsSystemSounds));
+                var names = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+                names.Children.Add(new TextBlock { Text = app.Title, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
+                if (!app.IsSystemSounds && !app.Title.Equals(app.Process, StringComparison.OrdinalIgnoreCase))
+                {
+                    var proc = new TextBlock { Text = app.Process, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis };
+                    proc.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
+                    names.Children.Add(proc);
+                }
+                Grid.SetColumn(names, 1);
+                g.Children.Add(names);
                 var sl = new Slider { Value = app.Volume, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 10, 0) };
                 sl.SetResourceReference(StyleProperty, "VolumeSlider");
-                Grid.SetColumn(sl, 1);
+                Grid.SetColumn(sl, 2);
                 g.Children.Add(sl);
                 var val = new TextBlock { Text = $"{app.Volume}%", TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-                Grid.SetColumn(val, 2);
+                Grid.SetColumn(val, 3);
                 g.Children.Add(val);
                 string process = app.Process;
                 bool system = app.IsSystemSounds;

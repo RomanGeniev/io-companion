@@ -99,12 +99,14 @@ namespace GraphiteCompanion
             foreach (var app in apps)
             {
                 var row = new Grid();
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 row.ColumnDefinitions.Add(new ColumnDefinition());
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(48) });
 
-                var title = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                row.Children.Add(AppIcons.Tile(app.ExePath, app.IsSystemSounds));
+                var title = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
                 title.Children.Add(new TextBlock { Text = app.Title, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
                 var sub = new TextBlock
                 {
@@ -113,6 +115,7 @@ namespace GraphiteCompanion
                 };
                 sub.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
                 title.Children.Add(sub);
+                Grid.SetColumn(title, 1);
                 row.Children.Add(title);
 
                 var mute = new System.Windows.Controls.Primitives.ToggleButton
@@ -122,16 +125,16 @@ namespace GraphiteCompanion
                     ToolTip = "Выключить звук программы",
                 };
                 mute.SetResourceReference(StyleProperty, "IconToggle");
-                Grid.SetColumn(mute, 1);
+                Grid.SetColumn(mute, 2);
                 row.Children.Add(mute);
 
                 var slider = new Slider { Value = app.Volume, VerticalAlignment = VerticalAlignment.Center };
                 slider.SetResourceReference(StyleProperty, "VolumeSlider");
-                Grid.SetColumn(slider, 2);
+                Grid.SetColumn(slider, 3);
                 row.Children.Add(slider);
 
                 var value = new TextBlock { Text = $"{app.Volume}%", TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.SemiBold };
-                Grid.SetColumn(value, 3);
+                Grid.SetColumn(value, 4);
                 row.Children.Add(value);
 
                 string process = app.Process;
