@@ -104,6 +104,13 @@ namespace GraphiteCompanion
             ResetEffectsButton.Visibility = noEffects ? Visibility.Collapsed : Visibility.Visible;
             EffectsProfileText.Visibility = noEffects ? Visibility.Collapsed : Visibility.Visible;
             if (noEffects) foreach (var c in outputCards) c.Visibility = Visibility.Collapsed;
+
+            // tabs: show only what the selected device can do
+            TabMic.Visibility = micSession != null ? Visibility.Visible : Visibility.Collapsed;
+            TabEffects.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
+            TabMixer.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
+            foreach (var tab in new[] { TabMic, TabEffects, TabMixer })
+                if (tab.IsChecked == true && tab.Visibility != Visibility.Visible) TabEq.IsChecked = true;
             UpdateDriverOffer();
             UpdateApoOffer();
         }

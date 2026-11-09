@@ -784,9 +784,28 @@ namespace GraphiteCompanion
             string cmp = Reg(ToggleCompare, (CA, 0x43, "Ctrl + Alt + C"), (CSA, 0x43, "Ctrl + Shift + Alt + C"));
             CompareButton.ToolTip = $"Держите — звук без эквалайзера и эффектов, отпустите — снова ваш. {cmp} — переключить";
 
-            HotkeysText.Text = $"Горячие клавиши работают везде:  {over} — панель поверх окон  ·  " +
-                               $"{pad} — амбушюры  ·  {eq} — эквалайзер  ·  {mic} — микрофон  ·  {cmp} — сравнить";
+            hotkeyLine = $"{pad} — амбушюры  ·  {eq} — эквалайзер  ·  {mic} — микрофон  ·  {cmp} — сравнить";
+            SetOverlayHotkeyLabel(over);
+            // Win+G is held by the Xbox Game Bar until it's turned off and Windows signs in again:
+            // keep trying quietly and switch to Win+G as soon as it becomes free.
+            if (over != "Win + G")
+            {
+                winGTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+                winGTimer.Tick += (_, _) =>
+                {
+                    if (!hotkeys.Register(HotkeyService.Win, 0x47, ToggleOverlay)) return;
+                    winGTimer.Stop();
+                    SetOverlayHotkeyLabel("Win + G (или " + over + ")");
+                };
+                winGTimer.Start();
+            }
         }
+
+        private string hotkeyLine = "";
+        private System.Windows.Threading.DispatcherTimer? winGTimer;
+
+        private void SetOverlayHotkeyLabel(string over) =>
+            HotkeysText.Text = $"Горячие клавиши работают везде:  {over} — панель поверх окон  ·  {hotkeyLine}";
 
         public void ShowFromTray()
         {

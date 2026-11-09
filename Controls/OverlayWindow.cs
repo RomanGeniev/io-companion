@@ -197,7 +197,7 @@ namespace GraphiteCompanion.Controls
             volumeText.Text = $"{s.Volume}%";
             mute.IsChecked = s.Muted;
             ((TextBlock)mute.Content).Text = s.Muted ? "" : "";
-            micButton.IsEnabled = s.HasMic;
+            micButton.Visibility = s.HasMic ? Visibility.Visible : Visibility.Collapsed;
             micText.Text = s.MicMuted ? "Микрофон выкл." : "Микрофон вкл.";
             micButton.SetResourceReference(ForegroundProperty, s.MicMuted ? "MutedFgBrush" : "TextBrush");
             loading = false;

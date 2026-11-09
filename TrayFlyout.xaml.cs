@@ -59,7 +59,9 @@ namespace GraphiteCompanion
             MicIcon.Text = s.MicMuted ? "" : "";
             MicText.Text = s.MicMuted ? "Микрофон выкл." : "Микрофон вкл.";
             MicButton.SetResourceReference(ForegroundProperty, s.MicMuted ? "MutedFgBrush" : "TextBrush");
-            MicButton.IsEnabled = s.HasMic;
+            MicButton.Visibility = s.HasMic ? Visibility.Visible : Visibility.Collapsed;
+            System.Windows.Controls.Grid.SetColumnSpan(OpenButton, s.HasMic ? 1 : 3);
+            System.Windows.Controls.Grid.SetColumn(OpenButton, s.HasMic ? 2 : 0);
             loading = false;
         }
 

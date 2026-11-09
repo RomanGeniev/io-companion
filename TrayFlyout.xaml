@@ -82,7 +82,7 @@
                         <TextBlock x:Name="MicText" Text="Микрофон вкл." Margin="8,0,0,0"/>
                     </StackPanel>
                 </Button>
-                <Button Grid.Column="2" Style="{StaticResource AccentButton}" Click="Open_Click">
+                <Button x:Name="OpenButton" Grid.Column="2" Style="{StaticResource AccentButton}" Click="Open_Click">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE8A7;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
                         <TextBlock Text="Открыть" Margin="8,0,0,0"/>
