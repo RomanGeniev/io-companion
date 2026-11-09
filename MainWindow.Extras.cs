@@ -578,6 +578,18 @@ namespace GraphiteCompanion
 
         public void ToggleEqFromOutside() => ToggleEq(notify: false);
 
+        public IReadOnlyList<string> CustomPresetNames => settings.Custom.Select(c => c.Name).ToList();
+        public string? ActiveCustomName => settings.ActiveCustom;
+
+        public void SelectCustomFromOutside(string name)
+        {
+            if (!settings.Custom.Any(c => c.Name == name)) return;
+            ForgetAutoState();
+            settings.ActiveCustom = name;
+            LoadPresetToUi();
+            ScheduleSave();
+        }
+
         public void SetVolumeFromOutside(int percent)
         {
             try { session?.SetVolume(percent / 100f); } catch { }

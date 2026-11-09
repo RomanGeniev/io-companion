@@ -34,6 +34,9 @@ namespace GraphiteCompanion.Controls
         private readonly TextBlock footer = new() { FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 16, 0, 0) };
         private readonly Border panel;
         private bool loading;
+        private readonly WrapPanel customPanel = new();
+        private readonly Border customBox = new() { CornerRadius = new CornerRadius(12), Padding = new Thickness(6, 6, 0, 0) };
+        private readonly TextBlock customTitle = new() { Text = "МОИ ПРЕСЕТЫ", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 14, 0, 8) };
 
         private static T R<T>(string key) => (T)Application.Current.FindResource(key);
 
@@ -102,9 +105,12 @@ namespace GraphiteCompanion.Controls
             compare.PreviewMouseLeftButtonDown += (_, _) => { main.CompareOn(); compare.CaptureMouse(); };
             compare.PreviewMouseLeftButtonUp += (_, _) => { compare.ReleaseMouseCapture(); main.CompareOff(); };
             var eqRow = new Grid { Margin = new Thickness(0, 12, 0, 0) };
-            eqRow.ColumnDefinitions.Add(new ColumnDefinition());
             eqRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            eqRow.ColumnDefinitions.Add(new ColumnDefinition());
             eqRow.Children.Add(eqSwitch);
+            compare.Padding = new Thickness(12, 6, 12, 6);
+            compare.Margin = new Thickness(16, 0, 0, 0);
+            compare.HorizontalAlignment = HorizontalAlignment.Right;
             Grid.SetColumn(compare, 1);
             eqRow.Children.Add(compare);
 
@@ -132,13 +138,19 @@ namespace GraphiteCompanion.Controls
             volRow.Children.Add(volumeText);
 
             micButton.SetResourceReference(StyleProperty, "GhostButton");
-            micButton.Margin = new Thickness(0, 12, 0, 0);
-            micButton.HorizontalContentAlignment = HorizontalAlignment.Left;
+            micButton.Margin = new Thickness(0, 10, 0, 0);
+            micButton.Padding = new Thickness(12, 6, 12, 6);
+            micButton.HorizontalAlignment = HorizontalAlignment.Left;
             micButton.Click += (_, _) => { main.ToggleMicMute(fromHotkey: false); Refresh(); };
 
+            customTitle.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
+            customBox.Child = customPanel;
+            customBox.SetResourceReference(Border.BackgroundProperty, "InsetBrush");
             var left = new StackPanel();
             left.Children.Add(Section("ЗВУК", first: true));
             left.Children.Add(modeBox);
+            left.Children.Add(customTitle);
+            left.Children.Add(customBox);
             left.Children.Add(eqRow);
             left.Children.Add(Section("ГРОМКОСТЬ"));
             left.Children.Add(volRow);
@@ -263,16 +275,17 @@ namespace GraphiteCompanion.Controls
                 modes[i].ToolTip = main.HotkeyLabel("mode." + (ListeningMode)i);
             }
             eqSwitch.IsChecked = s.EqEnabled;
-            eqSwitch.Content = s.EqEnabled ? "Эквалайзер включён" : "Эквалайзер выключен";
+            eqSwitch.Content = "Эквалайзер";
             eqSwitch.ToolTip = main.HotkeyLabel("eq");
-            compare.Content = Labeled("", "Сравнить", "зажмите, чтобы услышать без обработки", vertical: false);
+            compare.Content = Labeled("", "Сравнить", null, vertical: false);
+            compare.ToolTip = "Зажмите и держите — услышите звук без эквалайзера и эффектов. " + main.HotkeyLabel("compare") + " — переключить";
             volume.Value = s.Volume;
             volumeText.Text = $"{s.Volume}%";
             mute.IsChecked = s.Muted;
             ((TextBlock)mute.Content).Text = s.Muted ? "" : "";
             micButton.Visibility = s.HasMic ? Visibility.Visible : Visibility.Collapsed;
-            micButton.Content = Labeled(s.MicMuted ? "" : "", s.MicMuted ? "Микрофон выключен — нажмите, чтобы включить" : "Микрофон включён",
-                                        main.HotkeyLabel("mic"), vertical: false);
+            micButton.Content = Labeled(s.MicMuted ? "" : "", s.MicMuted ? "Микрофон выключен" : "Микрофон включён", null, vertical: false);
+            micButton.ToolTip = (s.MicMuted ? "Нажмите, чтобы включить микрофон" : "Нажмите, чтобы выключить микрофон") + " · " + main.HotkeyLabel("mic");
             micButton.SetResourceReference(ForegroundProperty, s.MicMuted ? "MutedFgBrush" : "TextBrush");
 
             replayButton.Content = Labeled("", main.ReplayActive ? "Повтор" : "Повтор выкл.", main.HotkeyLabel("replay"), vertical: true);
@@ -280,6 +293,7 @@ namespace GraphiteCompanion.Controls
             recordButton.Content = Labeled(main.RecordingActive ? "" : "", main.RecordingActive ? "Остановить" : "Запись", main.HotkeyLabel("record"), vertical: true);
             shotButton.Content = Labeled("", "Скриншот", main.HotkeyLabel("shot"), vertical: true);
             footer.Text = $"Esc или {main.OverlayKeyText()} — закрыть  ·  значок клавиатуры вверху — изменить горячие клавиши";
+            RefreshCustom();
             loading = false;
             RefreshOutputs();
             RefreshApps();
@@ -293,6 +307,25 @@ namespace GraphiteCompanion.Controls
             string before = name[..open].Trim(), inside = name.Substring(open + 1, close - open - 1);
             string[] generic = { "динамики", "speakers", "наушники", "headphones", "headset", "цифровой выход", "digital output", "realtek" };
             return Array.Exists(generic, g => before.StartsWith(g, StringComparison.OrdinalIgnoreCase)) ? inside : before;
+        }
+
+        private void RefreshCustom()
+        {
+            customPanel.Children.Clear();
+            var names = main.CustomPresetNames;
+            customTitle.Visibility = customBox.Visibility = names.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+            foreach (var n in names)
+            {
+                string name = n;
+                var rb = new RadioButton
+                {
+                    GroupName = "OverlayCustom", Content = new TextBlock { Text = name, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 180 },
+                    IsChecked = name == main.ActiveCustomName, Margin = new Thickness(0, 0, 6, 6), Padding = new Thickness(14, 7, 14, 7), ToolTip = name,
+                };
+                rb.SetResourceReference(StyleProperty, "Segment");
+                rb.Click += (_, _) => { main.SelectCustomFromOutside(name); Refresh(); };
+                customPanel.Children.Add(rb);
+            }
         }
 
         private void RefreshOutputs()
