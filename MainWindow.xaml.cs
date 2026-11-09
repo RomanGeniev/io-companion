@@ -649,7 +649,6 @@ namespace GraphiteCompanion
             suppressCombo = false;
 
             OpenSession(target);
-            TrackConnection(target);
         }
 
         private void OpenSession(AudioDeviceInfo? info)

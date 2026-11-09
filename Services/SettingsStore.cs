@@ -55,9 +55,6 @@ namespace GraphiteCompanion.Services
         public bool ShowOsd { get; set; } = true;
         public bool MicSounds { get; set; } = true;
 
-        public bool AutoDefaultDevice { get; set; } = true;
-        public string? PrevDefaultRender { get; set; }
-        public string? PrevDefaultCapture { get; set; }
         public bool Analyzer { get; set; } = true;
         public bool VolumeLimitEnabled { get; set; }
         public int VolumeLimit { get; set; } = 80;

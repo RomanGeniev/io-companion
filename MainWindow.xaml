@@ -216,9 +216,6 @@
                         <CheckBox x:Name="OsdSwitch" Style="{StaticResource Switch}" Content="Подсказка на экране (поверх игр)" Click="OsdSwitch_Click"
                                   ToolTip="Вместо уведомлений Windows — короткая надпись по центру экрана"/>
                         <CheckBox x:Name="MicSoundsSwitch" Style="{StaticResource Switch}" Content="Звук при выключении микрофона" Click="MicSoundsSwitch_Click"/>
-                        <CheckBox x:Name="AutoDefaultSwitch" Style="{StaticResource Switch}" Content="Переключать звук на наушники при включении"
-                                  Click="AutoDefaultSwitch_Click"
-                                  ToolTip="Включили гарнитуру — звук и микрофон Windows переходят на неё. Выключили — возвращаются на прежние устройства"/>
                         <Button x:Name="AudioCenterAutostartButton" Style="{StaticResource GhostButton}" Margin="0,6,0,6" HorizontalAlignment="Stretch"
                                 Click="AudioCenterAutostart_Click" Visibility="Collapsed"
                                 ToolTip="Официальный Audio Center запускается с Windows и может перезаписывать ваши настройки звука">

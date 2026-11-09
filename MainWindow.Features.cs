@@ -20,14 +20,12 @@ namespace GraphiteCompanion
         private readonly float[] specShown = new float[SpectrumAnalyzer.Bars];
         private readonly Path spectrumPath = new() { IsHitTestVisible = false };
         private DispatcherTimer? visualTimer;
-        private bool hadDevice;
         private double micShownDb = -90;
         private DateTime lastLimitNotice = DateTime.MinValue;
 
         private void InitFeatures()
         {
             AnalyzerSwitch.IsChecked = settings.Analyzer;
-            AutoDefaultSwitch.IsChecked = settings.AutoDefaultDevice;
             LimitSwitch.IsChecked = settings.VolumeLimitEnabled;
             LimitSlider.Value = settings.VolumeLimit;
             LimitSlider.IsEnabled = settings.VolumeLimitEnabled;
@@ -41,7 +39,6 @@ namespace GraphiteCompanion
             IsVisibleChanged += (_, _) => { UpdateMeters(); ScheduleTrim(); };
             StateChanged += (_, _) => { UpdateMeters(); ScheduleTrim(); };
             ScheduleTrim(); // started with --tray: trim once the startup work is done
-            hadDevice = session != null;
             InitAppearance();
             InitUpdates();
             InitDriver();
@@ -181,67 +178,6 @@ namespace GraphiteCompanion
         {
             settings.Analyzer = AnalyzerSwitch.IsChecked == true;
             UpdateMeters();
-            ScheduleSave();
-        }
-
-        // ===================== Default device =====================
-
-        private void TrackConnection(AudioDeviceInfo? target)
-        {
-            if (initialized)
-            {
-                if (target != null && !hadDevice) OnHeadsetConnected();
-                else if (target == null && hadDevice) OnHeadsetDisconnected();
-            }
-            hadDevice = target != null;
-        }
-
-        private void OnHeadsetConnected()
-        {
-            if (!settings.AutoDefaultDevice || session == null) return;
-            bool changed = false;
-            string? cur = DefaultDevice.Get(0);
-            if (cur != session.Info.Id)
-            {
-                settings.PrevDefaultRender = cur;
-                changed |= DefaultDevice.Set(session.Info.Id);
-            }
-            if (micSession != null)
-            {
-                string? curMic = DefaultDevice.Get(1);
-                if (curMic != micSession.Info.Id)
-                {
-                    settings.PrevDefaultCapture = curMic;
-                    changed |= DefaultDevice.Set(micSession.Info.Id);
-                }
-            }
-            if (changed) NotifyChange("Звук переключён на наушники", "");
-            ScheduleSave();
-        }
-
-        private void OnHeadsetDisconnected()
-        {
-            if (!settings.AutoDefaultDevice) return;
-            try
-            {
-                var outputs = AudioDevices.ListActiveOutputs();
-                var back = outputs.FirstOrDefault(d => d.Id == settings.PrevDefaultRender);
-                if (back != null && DefaultDevice.Set(back.Id))
-                    NotifyChange("Наушники отключены", "", "Звук: " + back.Name);
-                var inputs = AudioDevices.ListActiveInputs();
-                var backMic = inputs.FirstOrDefault(d => d.Id == settings.PrevDefaultCapture);
-                if (backMic != null) DefaultDevice.Set(backMic.Id);
-            }
-            catch (Exception ex) { SettingsStore.LogError(ex); }
-            settings.PrevDefaultRender = null;
-            settings.PrevDefaultCapture = null;
-            ScheduleSave();
-        }
-
-        private void AutoDefaultSwitch_Click(object sender, RoutedEventArgs e)
-        {
-            settings.AutoDefaultDevice = AutoDefaultSwitch.IsChecked == true;
-            if (settings.AutoDefaultDevice && session != null) OnHeadsetConnected(); // apply right away
             ScheduleSave();
         }
 
