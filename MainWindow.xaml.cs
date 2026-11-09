@@ -773,43 +773,10 @@ namespace GraphiteCompanion
 
         private void RegisterHotkeys()
         {
-            const uint CA = HotkeyService.Ctrl | HotkeyService.Alt;
-            const uint CSA = CA | HotkeyService.Shift;
-
-            // Tries combinations in order and returns the first one that is free.
-            string Reg(Action action, params (uint mods, uint key, string label)[] candidates)
-            {
-                foreach (var c in candidates)
-                    if (hotkeys.Register(c.mods, c.key, action)) return c.label;
-                return "не назначено";
-            }
-
-            string Mode(ListeningMode m, int n) => Reg(() => SelectMode(m, notify: true),
-                (CA, (uint)(0x30 + n), $"Ctrl + Alt + {n}"),
-                (CA, (uint)(0x6F + n), $"Ctrl + Alt + F{n}"),
-                (CSA, (uint)(0x30 + n), $"Ctrl + Shift + Alt + {n}"));
-
-            HkGames.Text = Mode(ListeningMode.Games, 1);
-            HkMusic.Text = Mode(ListeningMode.Music, 2);
-            HkMovies.Text = Mode(ListeningMode.Movies, 3);
-            string pad = Reg(() => SelectEarpad((Earpad)(((int)settings.Earpad + 1) % 3), notify: true),
-                (CA, 0x50, "Ctrl + Alt + P"), (CSA, 0x50, "Ctrl + Shift + Alt + P"));
-            string eq = Reg(() => ToggleEq(notify: true),
-                (CA, 0x45, "Ctrl + Alt + E"), (CSA, 0x45, "Ctrl + Shift + Alt + E"));
-            EqSwitch.ToolTip = eq;
-            string mic = Reg(() => ToggleMicMute(fromHotkey: true),
-                (CA, 0x4D, "Ctrl + Alt + M"), (CSA, 0x4D, "Ctrl + Shift + Alt + M"), (CA, 0x7B, "Ctrl + Alt + F12"));
-            MicHotkeyText.Text = $"{mic} — выключить / включить микрофон из любой программы, даже в игре.";
-            // Win+G: taken from the Xbox Game Bar with a keyboard hook; Ctrl+Alt+G always works as well
-            string over = Reg(ToggleOverlay, (CA, 0x47, "Ctrl + Alt + G"), (CSA, 0x47, "Ctrl + Shift + Alt + G"));
+            // Win+G: taken from the Xbox Game Bar with a keyboard hook; the configurable combination always works as well
             winG = new WinGHook();
             winG.Pressed += () => Dispatcher.BeginInvoke(new Action(ToggleOverlay));
-            if (winG.Active) over = "Win + G  (или " + over + ")";
-            string cmp = Reg(ToggleCompare, (CA, 0x43, "Ctrl + Alt + C"), (CSA, 0x43, "Ctrl + Shift + Alt + C"));
-            CompareButton.ToolTip = $"Держите — звук без эквалайзера и эффектов, отпустите — снова ваш. {cmp} — переключить";
-
-            hotkeyLine = $"{pad} — амбушюры  ·  {eq} — эквалайзер  ·  {mic} — микрофон  ·  {cmp} — сравнить";
-            SetOverlayHotkeyLabel(over);
+            ApplyHotkeys();
         }
 
         private string hotkeyLine = "";

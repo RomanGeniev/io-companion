@@ -54,6 +54,9 @@ namespace GraphiteCompanion.Services
         public bool MinimizeToTray { get; set; } = true;
         public bool Notifications { get; set; } = true;
 
+        /// <summary>Hotkeys changed by the user: action id → "modifiers:virtualKey".</summary>
+        public Dictionary<string, string> Hotkeys { get; set; } = new();
+
         public bool AutoSwitch { get; set; } = true;
         public List<AppRule> Rules { get; set; } = DefaultRules();
         public bool LinkEffects { get; set; } = true;

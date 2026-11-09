@@ -843,7 +843,19 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <TextBlock x:Name="HotkeysText" Grid.Row="3" Margin="4,12,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"/>
+            <Grid Grid.Row="3" Margin="4,12,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="HotkeysText" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                <Button Grid.Column="1" Style="{StaticResource GhostButton}" Margin="12,0,0,0" Click="Hotkeys_Click" ToolTip="Изменить любые горячие клавиши">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE765;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
+                        <TextBlock Text="Горячие клавиши…" Margin="8,0,0,0"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
         </Grid>
     </Grid>
 </Window>

@@ -60,11 +60,7 @@ namespace GraphiteCompanion
             ReplaySwitch.IsChecked = settings.ReplayEnabled;
             RecFolderText.Text = RecFolder;
 
-            const uint A = HotkeyService.Alt, CA = HotkeyService.Ctrl | HotkeyService.Alt;
-            replayKey = RegFirst(() => _ = SaveReplay(), (A, 0x79, "Alt + F10"), (CA, 0x79, "Ctrl + Alt + F10"));
-            recordKey = RegFirst(() => _ = ToggleRecording(), (A, 0x78, "Alt + F9"), (CA, 0x78, "Ctrl + Alt + F9"));
-            shotKey = RegFirst(() => _ = TakeScreenshot(), (A, 0x77, "Alt + F8"), (CA, 0x77, "Ctrl + Alt + F8"));
-            RecHotkeys.Text = $"{replayKey} — сохранить повтор  ·  {recordKey} — начать / остановить запись  ·  {shotKey} — скриншот. Работают и из игры. Файлы раскладываются по папкам игр.";
+            UpdateHotkeyTexts();
 
             recTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             recTimer.Tick += (_, _) => { TrackForeground(); UpdateRecStatus(); };

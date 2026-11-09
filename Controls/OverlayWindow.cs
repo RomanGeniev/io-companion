@@ -12,17 +12,17 @@ using GraphiteCompanion.Models;
 namespace GraphiteCompanion.Controls
 {
     /// <summary>
-    /// Game-Bar-style overlay opened by a hotkey over any window: dims the screen and shows a panel with
-    /// modes, equalizer, compare, device / microphone volume and per-program volume. Esc, the hotkey or
-    /// a click outside closes it. Works over windowed / borderless games (not exclusive fullscreen).
+    /// Panel opened by Win+G over any window: dims the screen and shows two columns - sound on the left
+    /// (mode, equalizer, volume, microphone, output device), recording and per-program volume on the right.
+    /// Esc, the hotkey or a click outside closes it. Works over windowed / borderless games (not exclusive fullscreen).
     /// </summary>
     public sealed class OverlayWindow : Window
     {
         private readonly MainWindow main;
         private readonly StackPanel apps = new();
-        private readonly UniformGrid outputs = new();
+        private readonly UniformGrid outputs = new() { Columns = 1 };
         private readonly Button replayButton = new(), recordButton = new(), shotButton = new();
-        private readonly TextBlock title = new() { FontSize = 20, FontWeight = FontWeights.SemiBold };
+        private readonly TextBlock title = new() { FontSize = 22, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
         private readonly TextBlock subtitle = new() { FontSize = 12 };
         private readonly RadioButton[] modes = new RadioButton[3];
         private readonly CheckBox eqSwitch = new() { Content = "Эквалайзер" };
@@ -30,8 +30,8 @@ namespace GraphiteCompanion.Controls
         private readonly TextBlock volumeText = new() { Width = 44, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.SemiBold };
         private readonly ToggleButton mute = new();
         private readonly Button micButton = new();
-        private readonly TextBlock micText = new();
         private readonly Button compare = new();
+        private readonly TextBlock footer = new() { FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 16, 0, 0) };
         private readonly Border panel;
         private bool loading;
 
@@ -53,14 +53,31 @@ namespace GraphiteCompanion.Controls
             FontSize = 13;
             SetResourceReference(ForegroundProperty, "TextBrush");
 
-            // ---- header
+            // ================= header: what is playing now + keyboard / close
             subtitle.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
-            var header = new StackPanel();
-            header.Children.Add(title);
-            header.Children.Add(subtitle);
+            var titles = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            titles.Children.Add(title);
+            titles.Children.Add(subtitle);
 
-            // ---- modes
-            var modeGrid = new UniformGrid { Columns = 3, Margin = new Thickness(0, 18, 0, 0) };
+            var keys = new Button { ToolTip = "Изменить горячие клавиши", Content = Glyph("", 15), Padding = new Thickness(12, 8, 12, 8) };
+            keys.SetResourceReference(StyleProperty, "GhostButton");
+            keys.Click += (_, _) => { Close(); main.OpenHotkeysWindow(); };
+            var close = new Button { ToolTip = "Закрыть (Esc)", Content = Glyph("", 15), Padding = new Thickness(12, 8, 12, 8), Margin = new Thickness(8, 0, 0, 0) };
+            close.SetResourceReference(StyleProperty, "GhostButton");
+            close.Click += (_, _) => Close();
+            var headerButtons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            headerButtons.Children.Add(keys);
+            headerButtons.Children.Add(close);
+            var header = new Grid();
+            header.ColumnDefinitions.Add(new ColumnDefinition());
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            header.Children.Add(titles);
+            Grid.SetColumn(headerButtons, 1);
+            header.Children.Add(headerButtons);
+
+            // ================= left column: sound
+            // ---- mode
+            var modeGrid = new UniformGrid { Columns = 3 };
             string[] glyphs = { "", "", "" };
             foreach (ListeningMode m in Enum.GetValues<ListeningMode>())
             {
@@ -68,7 +85,7 @@ namespace GraphiteCompanion.Controls
                 var content = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
                 content.Children.Add(new TextBlock { Text = glyphs[(int)m], FontFamily = R<FontFamily>("IconFont"), FontSize = 16, VerticalAlignment = VerticalAlignment.Center });
                 content.Children.Add(new TextBlock { Text = FactoryPresets.Name(m), Margin = new Thickness(8, 0, 0, 0), FontSize = 14 });
-                var rb = new RadioButton { GroupName = "OverlayMode", Content = content, Padding = new Thickness(0, 6, 0, 6) };
+                var rb = new RadioButton { GroupName = "OverlayMode", Content = content, Padding = new Thickness(0, 8, 0, 8) };
                 rb.SetResourceReference(StyleProperty, "Segment");
                 rb.Click += (_, _) => { main.SelectModeFromOutside(mode); Refresh(); };
                 modes[(int)m] = rb;
@@ -77,55 +94,27 @@ namespace GraphiteCompanion.Controls
             var modeBox = new Border { CornerRadius = new CornerRadius(12), Padding = new Thickness(4), Child = modeGrid };
             modeBox.SetResourceReference(Border.BackgroundProperty, "InsetBrush");
 
-            // ---- EQ + compare + mic
+            // ---- equalizer + compare
             eqSwitch.SetResourceReference(StyleProperty, "Switch");
             eqSwitch.Click += (_, _) => { main.ToggleEqFromOutside(); Refresh(); };
-
+            eqSwitch.VerticalAlignment = VerticalAlignment.Center;
             compare.SetResourceReference(StyleProperty, "GhostButton");
-            compare.Content = IconText("", "Сравнить (держите)");
             compare.PreviewMouseLeftButtonDown += (_, _) => { main.CompareOn(); compare.CaptureMouse(); };
             compare.PreviewMouseLeftButtonUp += (_, _) => { compare.ReleaseMouseCapture(); main.CompareOff(); };
-
-            micButton.SetResourceReference(StyleProperty, "GhostButton");
-            micButton.Content = micText;
-            micButton.Click += (_, _) => { main.ToggleMicMute(fromHotkey: false); Refresh(); };
-
-            var row = new Grid { Margin = new Thickness(0, 16, 0, 0) };
-            row.ColumnDefinitions.Add(new ColumnDefinition());
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            eqSwitch.HorizontalAlignment = HorizontalAlignment.Left;
-            row.Children.Add(eqSwitch);
-            compare.Margin = new Thickness(8, 0, 0, 0);
+            var eqRow = new Grid { Margin = new Thickness(0, 12, 0, 0) };
+            eqRow.ColumnDefinitions.Add(new ColumnDefinition());
+            eqRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            eqRow.Children.Add(eqSwitch);
             Grid.SetColumn(compare, 1);
-            row.Children.Add(compare);
-            micButton.Margin = new Thickness(8, 0, 0, 0);
-            Grid.SetColumn(micButton, 2);
-            row.Children.Add(micButton);
+            eqRow.Children.Add(compare);
 
-            // ---- replay / recording
-            var recRow = new UniformGrid { Columns = 3, Margin = new Thickness(0, 12, 0, 0) };
-            replayButton.SetResourceReference(StyleProperty, "GhostButton");
-            replayButton.Margin = new Thickness(0, 0, 4, 0);
-            replayButton.Click += async (_, _) => { Close(); await main.SaveReplay(); };
-            recordButton.SetResourceReference(StyleProperty, "GhostButton");
-            recordButton.Margin = new Thickness(4, 0, 4, 0);
-            recordButton.Click += async (_, _) => { Close(); await main.ToggleRecording(); };
-            recRow.Children.Add(replayButton);
-            shotButton.SetResourceReference(StyleProperty, "GhostButton");
-            shotButton.Margin = new Thickness(4, 0, 0, 0);
-            shotButton.Content = IconText("", "Скриншот");
-            shotButton.Click += async (_, _) => { Close(); await main.TakeScreenshot(); };
-            recRow.Children.Add(recordButton);
-            recRow.Children.Add(shotButton);
-            row.Tag = recRow; // added to the panel below
-
-            // ---- device volume
-            var volRow = new Grid { Margin = new Thickness(0, 16, 0, 0) };
+            // ---- volume + microphone
+            var volRow = new Grid();
             volRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             volRow.ColumnDefinitions.Add(new ColumnDefinition());
             volRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             mute.SetResourceReference(StyleProperty, "IconToggle");
+            mute.ToolTip = "Выключить / включить звук";
             mute.Content = new TextBlock { FontFamily = R<FontFamily>("IconFont"), FontSize = 15 };
             mute.Click += (_, _) => { main.ToggleMuteFromOutside(); Refresh(); };
             volRow.Children.Add(mute);
@@ -142,25 +131,61 @@ namespace GraphiteCompanion.Controls
             Grid.SetColumn(volumeText, 2);
             volRow.Children.Add(volumeText);
 
-            // ---- apps
-            var appsTitle = new TextBlock { Text = "ГРОМКОСТЬ ПРОГРАММ", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 22, 0, 8) };
-            appsTitle.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
-            var appsScroll = new ScrollViewer { Content = apps, MaxHeight = 300, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            micButton.SetResourceReference(StyleProperty, "GhostButton");
+            micButton.Margin = new Thickness(0, 12, 0, 0);
+            micButton.HorizontalContentAlignment = HorizontalAlignment.Left;
+            micButton.Click += (_, _) => { main.ToggleMicMute(fromHotkey: false); Refresh(); };
 
-            var hint = new TextBlock { Text = "Esc или та же горячая клавиша — закрыть", FontSize = 11, Margin = new Thickness(0, 14, 0, 0), HorizontalAlignment = HorizontalAlignment.Center };
-            hint.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
+            var left = new StackPanel();
+            left.Children.Add(Section("ЗВУК", first: true));
+            left.Children.Add(modeBox);
+            left.Children.Add(eqRow);
+            left.Children.Add(Section("ГРОМКОСТЬ"));
+            left.Children.Add(volRow);
+            left.Children.Add(micButton);
+            left.Children.Add(Section("КУДА ИДЁТ ЗВУК"));
+            left.Children.Add(outputs);
 
-            // ---- output device (where Windows sends the sound)
-            var outTitle = new TextBlock { Text = "ВЫВОД ЗВУКА", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 18, 0, 8) };
-            outTitle.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
-            outputs.Columns = 2;
+            // ================= right column: recording + programs
+            var recRow = new UniformGrid { Columns = 3 };
+            foreach (var b in new[] { replayButton, recordButton, shotButton })
+            {
+                b.SetResourceReference(StyleProperty, "GhostButton");
+                b.Padding = new Thickness(6, 10, 6, 10);
+                b.Margin = new Thickness(b == replayButton ? 0 : 3, 0, b == shotButton ? 0 : 3, 0);
+                recRow.Children.Add(b);
+            }
+            replayButton.Click += async (_, _) => { Close(); await main.SaveReplay(); };
+            recordButton.Click += async (_, _) => { Close(); await main.ToggleRecording(); };
+            shotButton.Click += async (_, _) => { Close(); await main.TakeScreenshot(); };
+
+            var appsScroll = new ScrollViewer { Content = apps, MaxHeight = 420, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+
+            var right = new StackPanel();
+            right.Children.Add(Section("ЗАПИСЬ ЭКРАНА", first: true));
+            right.Children.Add(recRow);
+            right.Children.Add(Section("ГРОМКОСТЬ ПРОГРАММ"));
+            right.Children.Add(appsScroll);
+
+            // ================= assemble
+            var columns = new Grid { Margin = new Thickness(0, 6, 0, 0) };
+            columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
+            columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            columns.Children.Add(left);
+            Grid.SetColumn(right, 2);
+            columns.Children.Add(right);
+
+            footer.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
 
             var content2 = new StackPanel();
-            foreach (var el in new UIElement[] { header, outTitle, outputs, modeBox, row, (UIElement)row.Tag, volRow, appsTitle, appsScroll, hint }) content2.Children.Add(el);
+            content2.Children.Add(header);
+            content2.Children.Add(columns);
+            content2.Children.Add(footer);
 
             panel = new Border
             {
-                Width = 560, CornerRadius = new CornerRadius(20), Padding = new Thickness(26, 22, 26, 18), BorderThickness = new Thickness(1),
+                Width = 960, CornerRadius = new CornerRadius(20), Padding = new Thickness(30, 24, 30, 18), BorderThickness = new Thickness(1),
                 HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
                 Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 40, ShadowDepth = 0, Opacity = 0.6 },
                 Child = content2,
@@ -178,11 +203,28 @@ namespace GraphiteCompanion.Controls
             Closed += (_, _) => main.CompareOff();
         }
 
-        private static StackPanel IconText(string glyph, string text)
+        private TextBlock Section(string text, bool first = false)
         {
-            var sp = new StackPanel { Orientation = Orientation.Horizontal };
-            sp.Children.Add(new TextBlock { Text = glyph, FontFamily = R<FontFamily>("IconFont"), VerticalAlignment = VerticalAlignment.Center });
-            sp.Children.Add(new TextBlock { Text = text, Margin = new Thickness(8, 0, 0, 0) });
+            var t = new TextBlock { Text = text, FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, first ? 14 : 22, 0, 8) };
+            t.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
+            return t;
+        }
+
+        private static TextBlock Glyph(string glyph, double size = 14) =>
+            new() { Text = glyph, FontFamily = R<FontFamily>("IconFont"), FontSize = size, VerticalAlignment = VerticalAlignment.Center };
+
+        /// <summary>Icon + title, with the hotkey as a small line under it.</summary>
+        private StackPanel Labeled(string glyph, string text, string? hotkey, bool vertical)
+        {
+            var title = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = vertical ? HorizontalAlignment.Center : HorizontalAlignment.Left };
+            title.Children.Add(Glyph(glyph));
+            title.Children.Add(new TextBlock { Text = text, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+            if (hotkey == null) return title;
+            var sp = new StackPanel();
+            sp.Children.Add(title);
+            var hint = new TextBlock { Text = hotkey, FontSize = 11, Margin = new Thickness(0, 3, 0, 0), HorizontalAlignment = vertical ? HorizontalAlignment.Center : HorizontalAlignment.Left };
+            hint.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
+            sp.Children.Add(hint);
             return sp;
         }
 
@@ -215,18 +257,29 @@ namespace GraphiteCompanion.Controls
             var s = main.GetQuickState();
             title.Text = s.Preset;
             subtitle.Text = s.Device;
-            for (int i = 0; i < modes.Length; i++) modes[i].IsChecked = s.Mode.HasValue && (int)s.Mode.Value == i;
+            for (int i = 0; i < modes.Length; i++)
+            {
+                modes[i].IsChecked = s.Mode.HasValue && (int)s.Mode.Value == i;
+                modes[i].ToolTip = main.HotkeyLabel("mode." + (ListeningMode)i);
+            }
             eqSwitch.IsChecked = s.EqEnabled;
+            eqSwitch.Content = s.EqEnabled ? "Эквалайзер включён" : "Эквалайзер выключен";
+            eqSwitch.ToolTip = main.HotkeyLabel("eq");
+            compare.Content = Labeled("", "Сравнить", "зажмите, чтобы услышать без обработки", vertical: false);
             volume.Value = s.Volume;
             volumeText.Text = $"{s.Volume}%";
             mute.IsChecked = s.Muted;
             ((TextBlock)mute.Content).Text = s.Muted ? "" : "";
             micButton.Visibility = s.HasMic ? Visibility.Visible : Visibility.Collapsed;
-            micText.Text = s.MicMuted ? "Микрофон выкл." : "Микрофон вкл.";
+            micButton.Content = Labeled(s.MicMuted ? "" : "", s.MicMuted ? "Микрофон выключен — нажмите, чтобы включить" : "Микрофон включён",
+                                        main.HotkeyLabel("mic"), vertical: false);
             micButton.SetResourceReference(ForegroundProperty, s.MicMuted ? "MutedFgBrush" : "TextBrush");
-            replayButton.Content = IconText("", main.ReplayActive ? "Сохранить повтор" : "Повторы выключены");
+
+            replayButton.Content = Labeled("", main.ReplayActive ? "Повтор" : "Повтор выкл.", main.HotkeyLabel("replay"), vertical: true);
             replayButton.IsEnabled = main.ReplayActive;
-            recordButton.Content = IconText(main.RecordingActive ? "" : "", main.RecordingActive ? "Остановить запись" : "Начать запись");
+            recordButton.Content = Labeled(main.RecordingActive ? "" : "", main.RecordingActive ? "Остановить" : "Запись", main.HotkeyLabel("record"), vertical: true);
+            shotButton.Content = Labeled("", "Скриншот", main.HotkeyLabel("shot"), vertical: true);
+            footer.Text = $"Esc или {main.OverlayKeyText()} — закрыть  ·  значок клавиатуры вверху — изменить горячие клавиши";
             loading = false;
             RefreshOutputs();
             RefreshApps();
@@ -251,17 +304,14 @@ namespace GraphiteCompanion.Controls
             foreach (var d in list)
             {
                 var dev = d;
-                var content = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-                content.Children.Add(new TextBlock
-                {
-                    Text = dev.HasCmEq || dev.Name.Contains("Наушники", StringComparison.OrdinalIgnoreCase) ? "" : "",
-                    FontFamily = R<FontFamily>("IconFont"), VerticalAlignment = VerticalAlignment.Center,
-                });
-                content.Children.Add(new TextBlock { Text = ShortName(dev.Name), Margin = new Thickness(8, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 200 });
+                var content = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left };
+                content.Children.Add(Glyph(dev.HasCmEq || dev.Name.Contains("Наушники", StringComparison.OrdinalIgnoreCase) ? "" : ""));
+                content.Children.Add(new TextBlock { Text = ShortName(dev.Name), Margin = new Thickness(10, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 340 });
                 var rb = new RadioButton
                 {
                     GroupName = "OverlayOut", Content = content, IsChecked = dev.Id == current,
-                    Margin = new Thickness(0, 0, 6, 6), ToolTip = dev.Name,
+                    Margin = new Thickness(0, 0, 0, 6), ToolTip = dev.Name, HorizontalContentAlignment = HorizontalAlignment.Left,
+                    Padding = new Thickness(12, 9, 12, 9),
                 };
                 rb.SetResourceReference(StyleProperty, "Segment");
                 rb.Click += (_, _) =>
@@ -284,7 +334,7 @@ namespace GraphiteCompanion.Controls
             }
             if (list.Count == 0)
             {
-                var empty = new TextBlock { Text = "Сейчас ни одна программа не играет звук.", FontSize = 12 };
+                var empty = new TextBlock { Text = "Сейчас ни одна программа не играет звук. Запустите музыку, игру или видео — она появится здесь.", FontSize = 12, TextWrapping = TextWrapping.Wrap };
                 empty.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
                 apps.Children.Add(empty);
                 return;
@@ -293,7 +343,7 @@ namespace GraphiteCompanion.Controls
             {
                 var g = new Grid { Margin = new Thickness(0, 0, 0, 10) };
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
                 g.ColumnDefinitions.Add(new ColumnDefinition());
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(44) });
                 g.Children.Add(AppIcons.Tile(app.ExePath, app.IsSystemSounds));

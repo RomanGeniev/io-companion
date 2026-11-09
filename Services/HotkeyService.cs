@@ -38,6 +38,22 @@ namespace GraphiteCompanion.Services
             return true;
         }
 
+        /// <summary>Unregisters everything (used while a key is being recorded in the settings window).</summary>
+        public void Clear()
+        {
+            foreach (var id in actions.Keys) UnregisterHotKey(source.Handle, id);
+            actions.Clear();
+        }
+
+        /// <summary>True when Windows would accept this combination right now (nobody else holds it).</summary>
+        public bool IsFree(uint modifiers, uint virtualKey)
+        {
+            int id = nextId++;
+            if (!RegisterHotKey(source.Handle, id, modifiers | NoRepeat, virtualKey)) return false;
+            UnregisterHotKey(source.Handle, id);
+            return true;
+        }
+
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
             if (msg == WmHotkey && actions.TryGetValue(wParam.ToInt32(), out var action))
