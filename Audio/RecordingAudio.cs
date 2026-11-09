@@ -63,9 +63,32 @@ namespace GraphiteCompanion.Audio
                 }
             }
 
+            // Jitter buffer. Devices deliver in 10–20 ms packets and the pump runs on a ~16 ms timer, so reading
+            // the queue dry the moment it has data made the microphone stutter (dozens of 16/32/48 ms gaps of
+            // silence per recording). Keep ~50 ms in reserve and nudge the level by one sample in 400 when the
+            // device clock runs slightly faster or slower than the wall clock - inaudible, no clicks.
+            private const int Prime = Rate / 20, Low = Prime / 2, High = Prime * 3;
+            private bool primed;
+            private int tick;
+
             public (float l, float r) Next()
             {
-                lock (queue) return queue.Count > 0 ? queue.Dequeue() : (0f, 0f);
+                lock (queue)
+                {
+                    if (!primed)
+                    {
+                        if (queue.Count < Prime) return (0f, 0f);   // (re)filling the reserve
+                        primed = true;
+                    }
+                    if (queue.Count == 0) { primed = false; return (0f, 0f); } // source went quiet (loopback with nothing playing)
+                    if (queue.Count > Rate / 2) while (queue.Count > Prime * 2) queue.Dequeue(); // long stall: catch up at once
+                    if (++tick % 400 == 0)
+                    {
+                        if (queue.Count > High) queue.Dequeue();        // a little behind: play one sample less
+                        else if (queue.Count < Low) return queue.Peek(); // running dry: repeat one sample
+                    }
+                    return queue.Dequeue();
+                }
             }
 
             public void Dispose()
