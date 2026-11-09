@@ -36,12 +36,24 @@ namespace GraphiteCompanion.Controls
         private NowPlaying? state;
         private DateTime stateTime;
         private string? shownKey;
-        private bool busy, dragging, settingValue;
+        private bool busy, dragging, scrubbing, settingValue;
         private DateTime ignoreUntil;     // after a seek / skip the app needs a moment before it reports the new position
         private int tick;
         private int seekFails;           // apps whose system seek was ignored: they may still work via their own slider
 
         private static T R<T>(string key) => (T)Application.Current.FindResource(key);
+
+        /// <summary>Is the point (relative to the slider) over the thumb circle itself?
+        /// Thumb.IsMouseOver is not usable here: it stays true while the thumb keeps the mouse
+        /// captured after a drag, which made every track click look like "on the thumb".</summary>
+        private static bool OnThumb(System.Windows.Controls.Slider slider, System.Windows.Controls.Primitives.Track track, Point p)
+        {
+            var thumb = track.Thumb;
+            if (thumb == null || thumb.ActualWidth <= 0) return false;
+            Point origin = thumb.TranslatePoint(new Point(0, 0), slider);   // thumb's top-left in slider coords
+            return p.X >= origin.X - 4 && p.X <= origin.X + thumb.ActualWidth + 4
+                && p.Y >= origin.Y - 4 && p.Y <= origin.Y + thumb.ActualHeight + 4;
+        }
 
         public NowPlayingCard(MainWindow main)
         {
@@ -99,17 +111,39 @@ namespace GraphiteCompanion.Controls
             seek.Maximum = 1;
             seek.SmallChange = 5;
             seek.LargeChange = 10;
-            seek.IsMoveToPointEnabled = true;   // click anywhere on the track = jump right there, not a ±10 s step
             seek.Focusable = false;   // arrow keys would snap the thumb back on the next poll
             seek.PreviewMouseLeftButtonDown += (_, e0) =>
             {
-                if (CanDragSeek()) dragging = true;
-                else e0.Handled = true;   // read-only: no drag and no click-to-point jump
+                if (!CanDragSeek()) { e0.Handled = true; return; }   // read-only: no drag, no click-to-point
+                // Click anywhere on the track = jump right there, and keep scrubbing while the
+                // button is held. IsMoveToPointEnabled never fires with this template (the click
+                // lands on the ±LargeChange RepeatButton), and Thumb.IsMouseOver is unreliable
+                // (it stays true while the thumb has the mouse captured after a drag), so hit-test
+                // the thumb's actual geometry instead.
+                var track = seek.Template.FindName("PART_Track", seek) as System.Windows.Controls.Primitives.Track;
+                if (track?.Thumb != null && !OnThumb(seek, track, e0.GetPosition(seek)))
+                {
+                    double v = track.ValueFromPoint(e0.GetPosition(track));
+                    if (!double.IsNaN(v)) seek.Value = Math.Clamp(v, 0, seek.Maximum);
+                    dragging = scrubbing = true;
+                    seek.CaptureMouse();   // keep scrubbing even if the cursor leaves the bar
+                    e0.Handled = true;   // the Thumb must not start a drag from a track click
+                }
+                else dragging = true;    // on the thumb: the Thumb starts its own drag
+            };
+            seek.MouseMove += (_, e0) =>
+            {
+                // scrubbing after a track click: the bar follows the mouse until the button is released
+                if (!scrubbing || e0.LeftButton != MouseButtonState.Pressed) return;
+                if (seek.Template.FindName("PART_Track", seek) is not System.Windows.Controls.Primitives.Track track) return;
+                double v = track.ValueFromPoint(e0.GetPosition(track));
+                if (!double.IsNaN(v)) seek.Value = Math.Clamp(v, 0, seek.Maximum);
             };
             seek.PreviewMouseLeftButtonUp += async (_, _) =>
             {
                 if (!dragging) return;
-                dragging = false;
+                dragging = scrubbing = false;
+                if (seek.IsMouseCaptured) seek.ReleaseMouseCapture();
                 var to = TimeSpan.FromSeconds(seek.Value);
                 if (state != null) { state = With(state, to, state.Playing); stateTime = DateTime.Now; }
                 ignoreUntil = DateTime.Now.AddMilliseconds(1500);   // the UIA fallback path needs longer
@@ -208,8 +242,18 @@ namespace GraphiteCompanion.Controls
                 var s = await MediaService.GetAsync();
                 if (DateTime.Now < ignoreUntil && s != null && state != null && s.Key == state.Key) return;
                 if (s == null || state == null || s.Key != state.Key) seekFails = 0;   // new track / app: give seeking a fresh chance
-                state = s;
+                if (s != null && state != null && s.Key == state.Key && s.Playing == state.Playing)
+                {
+                    // Same track, same play state: the system re-reports the position only every second or
+                    // two, and always a bit behind our extrapolation. Taking it verbatim snaps the bar
+                    // backwards - the "twitch". Keep the extrapolated position and resync the clock, so the
+                    // next tick counts elapsed time exactly once.
+                    if (Math.Abs((s.Position - CurrentPosition()).TotalSeconds) < 3.0)
+                        s = With(s, CurrentPosition(), s.Playing);
+                    // else: real jump (seek from the player's own UI) - take the polled position
+                }
                 stateTime = DateTime.Now;
+                state = s;
                 Show();
             }
             finally { busy = false; }

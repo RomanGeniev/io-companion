@@ -44,6 +44,10 @@ namespace GraphiteCompanion.Controls
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int GetWindowLong(IntPtr hWnd, int index);
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int SetWindowLong(IntPtr hWnd, int index, int value);
 
         public OverlayWindow(MainWindow main)
         {
@@ -53,6 +57,7 @@ namespace GraphiteCompanion.Controls
             ResizeMode = ResizeMode.NoResize;
             Topmost = true;
             ShowInTaskbar = false;
+            ShowActivated = false;          // never steal the foreground: a fullscreen game stays up
             Background = new SolidColorBrush(Color.FromArgb(0x99, 0, 0, 0));
             FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI");
             FontSize = 13;
@@ -234,11 +239,8 @@ namespace GraphiteCompanion.Controls
                 if (e.Key != Key.Escape) return;
                 if (outputPopup.IsOpen) outputPopup.IsOpen = false; else Close();
             };
-            Deactivated += (_, _) =>
-            {
-                // The seek fallback briefly raises the player's own window; that is not the user leaving
-                if (IsVisible && !Services.MediaService.SeekInProgress) Close();
-            }; // alt-tab / click into another window
+            // the window is never activated (so a fullscreen game stays up), so Deactivated never fires;
+            // it closes on the hotkey, Esc when focused, or a click on the dimmed area
             Closed += (_, _) => main.CompareOff();
         }
 
@@ -267,7 +269,9 @@ namespace GraphiteCompanion.Controls
             return sp;
         }
 
-        /// <summary>Shows the overlay on the monitor under the mouse cursor.</summary>
+        /// <summary>Shows the overlay on the monitor under the mouse cursor, over a fullscreen game,
+        /// without taking the foreground: the game never minimizes. Clicks still reach the panel
+        /// (WM_MOUSEACTIVATE → MA_NOACTIVATE); Esc no longer applies — close with the hotkey or a click outside.</summary>
         public void Open()
         {
             Refresh();
@@ -279,10 +283,20 @@ namespace GraphiteCompanion.Controls
             Width = Height = 200;
             Show();
             var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            // no-activate: clicks land in the panel without deactivating the game
+            SetWindowLong(hwnd, -20, GetWindowLong(hwnd, -20) | 0x08000000);   // WS_EX_NOACTIVATE
+            var source = System.Windows.Interop.HwndSource.FromHwnd(hwnd);
+            source.AddHook((IntPtr h, int msg, IntPtr w, IntPtr l, ref bool handled) =>
+            {
+                if (msg == 0x0021 && w == hwnd && l != IntPtr.Zero)            // WM_MOUSEACTIVATE
+                {
+                    handled = true;
+                    return (IntPtr)3;                                        // MA_NOACTIVATE: eat nothing, activate nothing
+                }
+                return IntPtr.Zero;
+            });
             SetWindowPos(hwnd, IntPtr.Zero, screen.Bounds.Left + 50, screen.Bounds.Top + 50, 200, 200, 0x0004 | 0x0010);
             WindowState = WindowState.Maximized;
-            Activate();
-            Focus();
             var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
             BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(140)));
             var st = (ScaleTransform)panel.RenderTransform;
@@ -319,7 +333,7 @@ namespace GraphiteCompanion.Controls
             replayButton.IsEnabled = main.ReplayActive;
             recordButton.Content = Labeled(main.RecordingActive ? "" : "", main.RecordingActive ? "Остановить" : "Запись", main.HotkeyLabel("record"), vertical: true);
             shotButton.Content = Labeled("", "Скриншот", main.HotkeyLabel("shot"), vertical: true);
-            footer.Text = $"Esc или {main.OverlayKeyText()} — закрыть  ·  значок клавиатуры вверху — изменить горячие клавиши";
+            footer.Text = $"{main.OverlayKeyText()} или клик по затемнению — закрыть  ·  значок клавиатуры вверху — изменить горячие клавиши";
             RefreshCustom();
             loading = false;
             RefreshOutputs();
