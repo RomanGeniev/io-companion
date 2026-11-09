@@ -148,7 +148,7 @@ namespace GraphiteCompanion
             CompareButton.ToolTip = $"Держите — звук без эквалайзера и эффектов, отпустите — снова ваш. {L("compare")} — переключить";
             replayKey = L("replay"); recordKey = L("record"); shotKey = L("shot");
             RecHotkeys.Text = $"{replayKey} — сохранить повтор  ·  {recordKey} — начать / остановить запись  ·  {shotKey} — скриншот. " +
-                              "Работают и из игры. Файлы раскладываются по папкам игр.";
+                              "Работают и из игры. Видео и скриншоты лежат отдельно, внутри — папки по играм.";
 
             hotkeyLine = $"{L("pad")} — амбушюры  ·  {L("eq")} — эквалайзер  ·  {L("mic")} — микрофон  ·  {L("compare")} — сравнить";
             string over = L("overlay");
