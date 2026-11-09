@@ -162,6 +162,30 @@ namespace GraphiteCompanion
 
         private void MixerRefresh_Click(object sender, RoutedEventArgs e) => RefreshMixer();
 
+        public string? CurrentDeviceId => session?.Info.Id;
+
+        /// <summary>Sets a program's volume on the selected device and (optionally) remembers it.</summary>
+        public void SetAppVolume(string process, int volume, bool remember)
+        {
+            if (session == null) return;
+            try { AppVolumeMixer.Set(session.Info.Id, process, volume, null); } catch { }
+            if (!remember) return;
+            if (volume == 100) settings.AppVolumes.Remove(process); else settings.AppVolumes[process] = volume;
+            ScheduleSave();
+        }
+
+        // ===================== Overlay (Win+G style) =====================
+
+        private OverlayWindow? overlay;
+
+        public void ToggleOverlay()
+        {
+            if (overlay is { IsVisible: true }) { overlay.Close(); return; }
+            overlay = new OverlayWindow(this);
+            overlay.Closed += (_, _) => { overlay = null; if (PageMixer.IsVisible) RefreshMixer(); };
+            overlay.Open();
+        }
+
         // ===================== Discord =====================
 
         private void UpdateDiscord()

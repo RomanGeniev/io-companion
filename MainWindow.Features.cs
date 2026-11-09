@@ -187,7 +187,7 @@ namespace GraphiteCompanion
                 MessageBox.Show(this, "Для теста слуха нужен эквалайзер: встроенный C-Media или Equalizer APO.", Title);
                 return;
             }
-            var restore = BeginNeutralSound();
+            CompareOn(); // EQ and effects off for clean test tones
             int[]? result = null;
             try
             {
@@ -196,7 +196,7 @@ namespace GraphiteCompanion
             }
             finally
             {
-                EndNeutralSound(restore);
+                CompareOff();
             }
             if (result == null) return;
 

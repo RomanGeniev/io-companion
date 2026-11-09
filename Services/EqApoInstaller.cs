@@ -92,6 +92,58 @@ namespace GraphiteCompanion.Services
                 GrantConfigAccess + "exit 0\n");
         }
 
+        // ---------------- RNNoise (noise suppression for any microphone) ----------------
+
+        // https://github.com/werman/noise-suppression-for-voice (GPL-3.0), official release asset
+        private const string RnnoiseUrl = "https://github.com/werman/noise-suppression-for-voice/releases/download/v1.10/win-rnnoise.zip";
+        private const string RnnoiseSha256 = "e4dcc186102850f8dcebeb766ad1bf34c24f6280bd614ef84b72dae4783fc517";
+
+        /// <summary>Where the plugin lives (inside Equalizer APO's folder, readable by the audio engine).</summary>
+        public static string RnnoisePath(bool stereo) =>
+            Path.Combine(EqApoController.InstallDir ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "EqualizerAPO"),
+                         "VSTPlugins", "IOCompanion", stereo ? "rnnoise_stereo.dll" : "rnnoise_mono.dll");
+
+        public static bool RnnoiseInstalled => File.Exists(RnnoisePath(false)) && File.Exists(RnnoisePath(true));
+
+        /// <summary>Downloads (SHA-256 verified) and installs the RNNoise VST plugin (one UAC prompt).</summary>
+        public static async Task<bool> InstallRnnoiseAsync(IProgress<double>? progress = null)
+        {
+            string work = Path.Combine(Path.GetTempPath(), "IOCompanionRnnoise");
+            if (Directory.Exists(work)) Directory.Delete(work, true);
+            Directory.CreateDirectory(work);
+            string zip = Path.Combine(work, "win-rnnoise.zip");
+
+            using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) })
+            {
+                http.DefaultRequestHeaders.UserAgent.ParseAdd("IO-Companion");
+                using var response = await http.GetAsync(RnnoiseUrl, HttpCompletionOption.ResponseHeadersRead);
+                response.EnsureSuccessStatusCode();
+                long total = response.Content.Headers.ContentLength ?? -1, done = 0;
+                await using var src = await response.Content.ReadAsStreamAsync();
+                await using var dst = File.Create(zip);
+                var buf = new byte[81920];
+                int read;
+                while ((read = await src.ReadAsync(buf)) > 0)
+                {
+                    await dst.WriteAsync(buf.AsMemory(0, read));
+                    done += read;
+                    if (total > 0) progress?.Report((double)done / total);
+                }
+            }
+            if (HashOf(zip) != RnnoiseSha256)
+                throw new InvalidOperationException("Скачанный модуль шумоподавления не совпал с официальным. Установка отменена.");
+
+            System.IO.Compression.ZipFile.ExtractToDirectory(zip, Path.Combine(work, "x"));
+            string vst = Path.Combine(work, "x", "win-rnnoise", "vst");
+            string target = Path.GetDirectoryName(RnnoisePath(false))!;
+            string Q(string s) => "'" + s.Replace("'", "''") + "'";
+            return await RunElevatedAsync(
+                $"New-Item -ItemType Directory -Force -Path {Q(target)} | Out-Null\n" +
+                $"Copy-Item -LiteralPath {Q(Path.Combine(vst, "rnnoise_mono.dll"))} -Destination {Q(target)} -Force\n" +
+                $"Copy-Item -LiteralPath {Q(Path.Combine(vst, "rnnoise_stereo.dll"))} -Destination {Q(target)} -Force\n" +
+                "exit 0\n") && RnnoiseInstalled;
+        }
+
         public static void Reboot() =>
             Process.Start(new ProcessStartInfo("shutdown.exe", "/r /t 5 /c \"IO Companion: перезагрузка для включения эквалайзера\"")
             { CreateNoWindow = true, UseShellExecute = false });

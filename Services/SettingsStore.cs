@@ -17,6 +17,13 @@ namespace GraphiteCompanion.Services
         public Dictionary<string, int>? Effects { get; set; }
     }
 
+    public sealed class DeviceProfile
+    {
+        public ListeningMode Mode { get; set; } = ListeningMode.Music;
+        public Earpad Earpad { get; set; } = Earpad.Fabric;
+        public string? ActiveCustom { get; set; }
+    }
+
     /// <summary>Foreground program → profile ("mode:Games" or "custom:Name").</summary>
     public sealed class AppRule
     {
@@ -63,6 +70,8 @@ namespace GraphiteCompanion.Services
         public string? DiscordAppId { get; set; }
         /// <summary>Remembered per-program volume (process name → 0..100).</summary>
         public Dictionary<string, int> AppVolumes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Device id → its own mode / earpads / preset.</summary>
+        public Dictionary<string, DeviceProfile> DeviceProfiles { get; set; } = new();
 
         public string Theme { get; set; } = "Dark";
         public string Accent { get; set; } = "Violet";

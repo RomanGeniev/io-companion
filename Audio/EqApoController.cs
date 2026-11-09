@@ -12,7 +12,8 @@ namespace GraphiteCompanion.Audio
     /// <summary>
     /// Equalizer through Equalizer APO (open source, works with any output device).
     /// IO Companion keeps its settings in its own file "iocompanion.txt" inside Equalizer APO's config
-    /// folder and config.txt includes it; Equalizer APO applies changes as soon as the file is saved.
+    /// folder; config.txt includes it. Every device gets its own "Device:" section, so speakers,
+    /// headphones and microphones each keep their own sound. Equalizer APO applies changes on save.
     /// </summary>
     public sealed class EqApoController : IEqualizer
     {
@@ -20,17 +21,10 @@ namespace GraphiteCompanion.Audio
         private const string OwnFile = "iocompanion.txt";
         private const string Marker = "# IO Companion";
 
-        private readonly string configDir;
-        private int[] bands = new int[EqBands.Count];
-        private bool enabled = true;
-
+        private readonly string deviceGuid;
         public string Engine => "Equalizer APO";
 
-        private EqApoController(string configDir)
-        {
-            this.configDir = configDir;
-            Load();
-        }
+        private EqApoController(string deviceGuid) => this.deviceGuid = deviceGuid;
 
         // ---------------- detection ----------------
 
@@ -101,7 +95,7 @@ namespace GraphiteCompanion.Audio
             return set;
         }
 
-        /// <summary>Is Equalizer APO attached to this output device (selected in Device Selector)?</summary>
+        /// <summary>Is Equalizer APO attached to this device (ticked in Device Selector)? Works for outputs and microphones.</summary>
         public static bool IsAttached(string deviceId)
         {
             var path = ApoPropertyStore.FxRegistryPath(deviceId);
@@ -127,18 +121,28 @@ namespace GraphiteCompanion.Audio
             return false;
         }
 
+        /// <summary>"{0.0.0.00000000}.{guid}" → "{guid}" (what Equalizer APO's Device: command matches).</summary>
+        public static string GuidOf(string deviceId)
+        {
+            int dot = deviceId.LastIndexOf('.');
+            return dot >= 0 ? deviceId[(dot + 1)..] : deviceId;
+        }
+
         /// <summary>Opens the controller when Equalizer APO is installed, attached to the device and its config is writable.</summary>
         public static EqApoController? TryOpen(string deviceId)
         {
-            if (!IsAttached(deviceId)) return null;
-            var dir = ConfigDir;
-            if (dir == null || !Directory.Exists(dir)) return null;
+            if (!IsAttached(deviceId) || ConfigDir is not { } dir || !Directory.Exists(dir)) return null;
             try
             {
-                var c = new EqApoController(dir);
-                c.EnsureIncluded();
-                c.Save();
-                return c;
+                lock (Store)
+                {
+                    Store.EnsureLoaded(dir);
+                    Store.EnsureIncluded();
+                    string guid = GuidOf(deviceId);
+                    Store.Out.TryAdd(guid, new OutSection());
+                    Store.Save();
+                    return new EqApoController(guid);
+                }
             }
             catch (UnauthorizedAccessException)
             {
@@ -146,68 +150,178 @@ namespace GraphiteCompanion.Audio
             }
         }
 
-        // ---------------- config files ----------------
+        // ---------------- IEqualizer (this device's section) ----------------
 
-        private string OwnPath => Path.Combine(configDir, OwnFile);
-
-        /// <summary>Makes config.txt include our file (the original config is kept as a backup).</summary>
-        private void EnsureIncluded()
+        private OutSection Section
         {
-            string main = Path.Combine(configDir, "config.txt");
-            string include = $"Include: {OwnFile}";
-            if (File.Exists(main))
+            get
             {
-                string text = File.ReadAllText(main);
-                if (text.Contains(include, StringComparison.OrdinalIgnoreCase)) return;
-                string backup = Path.Combine(configDir, "config.before-iocompanion.txt");
-                if (!File.Exists(backup)) File.Copy(main, backup);
+                if (!Store.Out.TryGetValue(deviceGuid, out var s)) Store.Out[deviceGuid] = s = new OutSection();
+                return s;
             }
-            File.WriteAllText(main,
-                $"{Marker}: the equalizer is controlled by IO Companion.\r\n" +
-                "# Your previous config is saved as config.before-iocompanion.txt\r\n" +
-                include + "\r\n", Encoding.UTF8);
         }
 
-        private void Load()
+        public int[] ReadBands() { lock (Store) return (int[])Section.Bands.Clone(); }
+
+        public bool ReadEnabled() { lock (Store) return Section.Enabled; }
+
+        // what is on disk; on a failed write it stays "dirty", so the next call retries
+        private bool dirty = true;
+
+        public void SetEnabled(bool on)
         {
-            try
+            lock (Store)
             {
+                if (Section.Enabled == on && !dirty) return;
+                Section.Enabled = on;
+                dirty = true;
+                Store.Save();
+                dirty = false;
+            }
+        }
+
+        public void SetBands(IReadOnlyList<int> newBands, IReadOnlyList<int>? previous)
+        {
+            var b = newBands.Select(v => Math.Clamp(v, EqBands.Min, EqBands.Max)).ToArray();
+            lock (Store)
+            {
+                if (b.SequenceEqual(Section.Bands) && !dirty) return;
+                Section.Bands = b;
+                dirty = true;
+                Store.Save();
+                dirty = false;
+            }
+        }
+
+        public void Dispose() { }
+
+        // ---------------- microphone noise suppression ----------------
+
+        /// <summary>Turns RNNoise on/off for a microphone that has Equalizer APO attached. Null plugin path = off.</summary>
+        public static bool SetMicNoiseSuppression(string micDeviceId, string? pluginPath)
+        {
+            if (!IsAttached(micDeviceId) || ConfigDir is not { } dir) return false;
+            lock (Store)
+            {
+                Store.EnsureLoaded(dir);
+                Store.EnsureIncluded();
+                string guid = GuidOf(micDeviceId);
+                if (pluginPath == null) Store.Mic.Remove(guid);
+                else Store.Mic[guid] = pluginPath;
+                Store.Save();
+            }
+            return true;
+        }
+
+        public static bool MicNoiseSuppressionOn(string micDeviceId)
+        {
+            if (ConfigDir is not { } dir) return false;
+            lock (Store)
+            {
+                Store.EnsureLoaded(dir);
+                return Store.Mic.ContainsKey(GuidOf(micDeviceId));
+            }
+        }
+
+        // ---------------- shared config file ----------------
+
+        private sealed class OutSection
+        {
+            public bool Enabled = true;
+            public int[] Bands = new int[EqBands.Count];
+        }
+
+        private static readonly ConfigStore Store = new();
+
+        private sealed class ConfigStore
+        {
+            public readonly Dictionary<string, OutSection> Out = new(StringComparer.OrdinalIgnoreCase);
+            public readonly Dictionary<string, string> Mic = new(StringComparer.OrdinalIgnoreCase); // guid → plugin dll
+            private string? dir;
+
+            private string OwnPath => Path.Combine(dir!, OwnFile);
+
+            public void EnsureLoaded(string configDir)
+            {
+                if (dir == configDir) return;
+                dir = configDir;
+                Out.Clear();
+                Mic.Clear();
                 if (!File.Exists(OwnPath)) return;
+                // state lines: "# out {guid} enabled=1 bands=0,1,..." / "# mic {guid} plugin=C:\...\x.dll"
+                // (older single-device format "# enabled=" / "# bands=" is dropped - sections start fresh)
                 foreach (var line in File.ReadAllLines(OwnPath))
                 {
-                    if (line.StartsWith("# enabled=", StringComparison.Ordinal))
-                        enabled = line.EndsWith("1");
-                    else if (line.StartsWith("# bands=", StringComparison.Ordinal))
+                    var parts = line.Split(' ', 4, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length < 3 || parts[0] != "#") continue;
+                    if (parts[1] == "out" && parts.Length >= 4)
                     {
-                        var parts = line[8..].Split(',');
-                        if (parts.Length == EqBands.Count)
-                            bands = parts.Select(p => int.TryParse(p, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : 0).ToArray();
+                        var s = new OutSection();
+                        foreach (var kv in parts[3].Split(' '))
+                        {
+                            if (kv.StartsWith("enabled=")) s.Enabled = kv.EndsWith("1");
+                            else if (kv.StartsWith("bands="))
+                            {
+                                var b = kv[6..].Split(',');
+                                if (b.Length == EqBands.Count)
+                                    s.Bands = b.Select(x => int.TryParse(x, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : 0).ToArray();
+                            }
+                        }
+                        Out[parts[2]] = s;
+                    }
+                    else if (parts[1] == "mic" && parts.Length >= 4 && parts[3].StartsWith("plugin="))
+                    {
+                        Mic[parts[2]] = parts[3][7..];
                     }
                 }
             }
-            catch { }
-        }
 
-        private void Save()
-        {
-            var sb = new StringBuilder();
-            sb.Append(Marker).Append(" - written automatically, changes here will be overwritten\r\n");
-            sb.Append("# enabled=").Append(enabled ? 1 : 0).Append("\r\n");
-            sb.Append("# bands=").Append(string.Join(",", bands.Select(b => b.ToString(CultureInfo.InvariantCulture)))).Append("\r\n");
-            if (enabled)
+            /// <summary>Makes config.txt include our file (the original config is kept as a backup).</summary>
+            public void EnsureIncluded()
             {
-                sb.Append("GraphicEQ: ");
-                sb.Append(string.Join("; ", Frequencies.Select((f, i) =>
-                    $"{f.ToString(CultureInfo.InvariantCulture)} {bands[i].ToString(CultureInfo.InvariantCulture)}")));
-                sb.Append("\r\n");
+                string main = Path.Combine(dir!, "config.txt");
+                string include = $"Include: {OwnFile}";
+                if (File.Exists(main))
+                {
+                    string text = File.ReadAllText(main);
+                    if (text.Contains(include, StringComparison.OrdinalIgnoreCase)) return;
+                    string backup = Path.Combine(dir!, "config.before-iocompanion.txt");
+                    if (!File.Exists(backup)) File.Copy(main, backup);
+                }
+                WriteWithRetry(main, Encoding.UTF8.GetBytes(
+                    $"{Marker}: the equalizer is controlled by IO Companion.\r\n" +
+                    "# Your previous config is saved as config.before-iocompanion.txt\r\n" +
+                    include + "\r\n"));
             }
-            WriteWithRetry(OwnPath, Encoding.UTF8.GetBytes(sb.ToString()));
+
+            public void Save()
+            {
+                var ic = CultureInfo.InvariantCulture;
+                var sb = new StringBuilder();
+                sb.Append(Marker).Append(" - written automatically, changes here will be overwritten\r\n");
+                foreach (var (guid, s) in Out)
+                    sb.Append($"# out {guid} enabled={(s.Enabled ? 1 : 0)} bands={string.Join(",", s.Bands.Select(b => b.ToString(ic)))}\r\n");
+                foreach (var (guid, plugin) in Mic)
+                    sb.Append($"# mic {guid} plugin={plugin}\r\n");
+
+                foreach (var (guid, s) in Out)
+                {
+                    sb.Append($"\r\nDevice: {guid}\r\n");
+                    if (s.Enabled)
+                        sb.Append("GraphicEQ: ")
+                          .Append(string.Join("; ", Frequencies.Select((f, i) => $"{f.ToString(ic)} {s.Bands[i].ToString(ic)}")))
+                          .Append("\r\n");
+                }
+                foreach (var (guid, plugin) in Mic)
+                    sb.Append($"\r\nDevice: {guid}\r\nVSTPlugin: Library \"{plugin}\"\r\n");
+                // anything Equalizer APO is attached to but we don't manage: leave untouched (no commands)
+                WriteWithRetry(OwnPath, Encoding.UTF8.GetBytes(sb.ToString()));
+            }
         }
 
         /// <summary>
         /// Equalizer APO (inside the Windows audio engine) re-reads the file right after every change and
         /// keeps it open for a moment; a write at that instant is refused. Retry briefly instead of failing.
-        /// The content is written in one call, so a partially written file is never left behind.
         /// </summary>
         private static void WriteWithRetry(string path, byte[] data)
         {
@@ -222,37 +336,7 @@ namespace GraphiteCompanion.Audio
                 catch (IOException) when (attempt < 25) { System.Threading.Thread.Sleep(20); }
                 catch (UnauthorizedAccessException) when (attempt < 25 && File.Exists(path)) { System.Threading.Thread.Sleep(20); }
             }
-            try { File.Delete(path + ".tmp"); } catch { } // leftover from older versions
+            try { File.Delete(path + ".tmp"); } catch { }
         }
-
-        // ---------------- IEqualizer ----------------
-
-        public int[] ReadBands() => (int[])bands.Clone();
-
-        public bool ReadEnabled() => enabled;
-
-        // "written" is what is actually on disk; on a failed write it stays old, so the next call retries.
-        private bool dirty = true;
-
-        public void SetEnabled(bool on)
-        {
-            if (enabled == on && !dirty) return;
-            enabled = on;
-            dirty = true;
-            Save();
-            dirty = false;
-        }
-
-        public void SetBands(IReadOnlyList<int> newBands, IReadOnlyList<int>? previous)
-        {
-            var b = newBands.Select(v => Math.Clamp(v, EqBands.Min, EqBands.Max)).ToArray();
-            if (b.SequenceEqual(bands) && !dirty) return;
-            bands = b;
-            dirty = true;
-            Save();
-            dirty = false;
-        }
-
-        public void Dispose() { }
     }
 }

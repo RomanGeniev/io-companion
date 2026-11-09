@@ -438,6 +438,14 @@
                                     <TextBlock Text="Ровно" Margin="8,0,0,0"/>
                                 </StackPanel>
                             </Button>
+                            <Button x:Name="CompareButton" Style="{StaticResource GhostButton}" Margin="8,0,0,0"
+                                    PreviewMouseLeftButtonDown="Compare_Down" PreviewMouseLeftButtonUp="Compare_Up" MouseLeave="Compare_Leave"
+                                    ToolTip="Держите — звук без эквалайзера и эффектов, отпустите — снова ваш. Горячая клавиша переключает">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE8E1;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="CompareText" Text="Сравнить" Margin="8,0,0,0"/>
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                             <CheckBox x:Name="AnalyzerSwitch" Style="{StaticResource Switch}" Content="Анализатор" Margin="0,0,16,0"
@@ -565,6 +573,30 @@
                         </StackPanel>
                     </Border>
                     <UniformGrid x:Name="MicEffectsGrid" Columns="2" Margin="-6,0" VerticalAlignment="Top"/>
+                    <!-- RNNoise via Equalizer APO: noise suppression for any microphone -->
+                    <Border x:Name="NrCard" Style="{StaticResource Card}" Margin="0,6,0,0" Padding="18,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Width="38" Height="38" CornerRadius="10" Background="{DynamicResource InsetBrush}" VerticalAlignment="Top">
+                                <TextBlock Text="&#xE720;" FontFamily="{StaticResource IconFont}" FontSize="17" Foreground="{DynamicResource AccentBrush}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="12,0">
+                                <TextBlock Text="Шумоподавление для любого микрофона" FontSize="15" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="NrText" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                <CheckBox x:Name="NrSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="NrSwitch_Click" Visibility="Collapsed"/>
+                                <Button x:Name="NrButton" Style="{StaticResource AccentButton}" Click="NrButton_Click" Visibility="Collapsed">
+                                    <TextBlock x:Name="NrButtonText"/>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
                     <!-- Hear yourself -->
                     <Border Style="{StaticResource Card}" Margin="0,6,0,0" Padding="18,16">
                         <Grid>

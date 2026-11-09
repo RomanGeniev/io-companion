@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -382,6 +382,7 @@ namespace GraphiteCompanion
             PageMic.Visibility = tab == "Mic" ? Visibility.Visible : Visibility.Collapsed;
             PageAuto.Visibility = tab == "Auto" ? Visibility.Visible : Visibility.Collapsed;
             PageMixer.Visibility = tab == "Mixer" ? Visibility.Visible : Visibility.Collapsed;
+            if (tab == "Mic") UpdateNrCard();
             if (tab == "Mixer") RefreshMixer();
             if (initialized)
                 AnimatePage(tab switch { "Eq" => PageEq, "Effects" => PageEffects, "Mic" => PageMic, "Mixer" => PageMixer, _ => PageAuto });
@@ -471,6 +472,7 @@ namespace GraphiteCompanion
             UpdateClipInfo();
             ScheduleApply();
             ApplyLinkedEffects();
+            if (initialized) StoreDeviceProfile();
             flyout?.Refresh();
         }
 
@@ -582,10 +584,11 @@ namespace GraphiteCompanion
             if (eq == null) return;
             try
             {
-                if (lastWrittenEnabled != settings.EqEnabled)
+                bool wantEnabled = settings.EqEnabled && !Comparing; // "Сравнить" keeps the EQ off
+                if (lastWrittenEnabled != wantEnabled)
                 {
-                    eq.SetEnabled(settings.EqEnabled);
-                    lastWrittenEnabled = settings.EqEnabled;
+                    eq.SetEnabled(wantEnabled);
+                    lastWrittenEnabled = wantEnabled;
                 }
                 var applied = AppliedBands();
                 eq.SetBands(applied, lastWrittenBands);
@@ -698,7 +701,7 @@ namespace GraphiteCompanion
             ReloadEffects();
             if (initialized) ApplyLinkedEffects();
             PollMic();
-            if (initialized) { UpdateBrand(); UpdateMeters(); LoadPresetToUi(); }
+            if (initialized) { CompareOff(); RestoreDeviceProfile(); UpdateBrand(); UpdateMeters(); LoadPresetToUi(); }
         }
 
         private void CloseSession()
@@ -774,9 +777,15 @@ namespace GraphiteCompanion
             string mic = Reg(() => ToggleMicMute(fromHotkey: true),
                 (CA, 0x4D, "Ctrl + Alt + M"), (CSA, 0x4D, "Ctrl + Shift + Alt + M"), (CA, 0x7B, "Ctrl + Alt + F12"));
             MicHotkeyText.Text = $"{mic} — выключить / включить микрофон из любой программы, даже в игре.";
+            // Win+G belongs to the Xbox Game Bar; it's tried first in case the user turned the Game Bar off
+            string over = Reg(ToggleOverlay,
+                (HotkeyService.Win, 0x47, "Win + G"),
+                (CA, 0x47, "Ctrl + Alt + G"), (CSA, 0x47, "Ctrl + Shift + Alt + G"));
+            string cmp = Reg(ToggleCompare, (CA, 0x43, "Ctrl + Alt + C"), (CSA, 0x43, "Ctrl + Shift + Alt + C"));
+            CompareButton.ToolTip = $"Держите — звук без эквалайзера и эффектов, отпустите — снова ваш. {cmp} — переключить";
 
-            HotkeysText.Text = "Горячие клавиши работают везде, даже когда окно свёрнуто в трей:  " +
-                               $"{pad} — тип амбушюр  ·  {eq} — эквалайзер вкл/выкл  ·  {mic} — микрофон";
+            HotkeysText.Text = $"Горячие клавиши работают везде:  {over} — панель поверх окон  ·  " +
+                               $"{pad} — амбушюры  ·  {eq} — эквалайзер  ·  {mic} — микрофон  ·  {cmp} — сравнить";
         }
 
         public void ShowFromTray()

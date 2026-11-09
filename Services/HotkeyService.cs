@@ -12,6 +12,7 @@ namespace GraphiteCompanion.Services
         public const uint Alt = 0x1;
         public const uint Ctrl = 0x2;
         public const uint Shift = 0x4;
+        public const uint Win = 0x8;
         private const uint NoRepeat = 0x4000;
         private const int WmHotkey = 0x0312;
 
