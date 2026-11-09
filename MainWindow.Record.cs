@@ -46,7 +46,7 @@ namespace GraphiteCompanion
         private ReplayService Svc(MonitorItem m)
         {
             if (!svcs.TryGetValue(m.Device, out var s)) svcs[m.Device] = s = new ReplayService(m.Device.TrimStart('\\', '.'));
-            s.Tag = SelectedMonitors.Count() > 1 ? $"монитор {m.Index + 1}" : "";
+            s.MonitorName = $"Монитор {m.Index + 1}";
             return s;
         }
 
@@ -142,8 +142,26 @@ namespace GraphiteCompanion
         private void UpdateMonitorHint()
         {
             MonitorHint.Text = SelectedMonitors.Count() > 1
-                ? "Каждый монитор пишется отдельным роликом. Папка игры берётся по окну на этом мониторе. Идущая запись продолжится на прежних мониторах."
-                : "Игра для папки определяется по окну на этом мониторе, а не по тому, где вы сейчас нажали клавишу.";
+                ? "По клавише записи, повтора или скриншота появится выбор: какой монитор сохранить (или все). " +
+                  "Файлы лягут в «Монитор N\\Видео\\Игра» и «Монитор N\\Фото\\Игра»."
+                : "Файлы лягут в «Монитор N\\Видео\\Игра» и «Монитор N\\Фото\\Игра». Игра определяется по окну на этом мониторе.";
+        }
+
+        /// <summary>
+        /// Which of the selected monitors to save. One selected → that one, no question.
+        /// Several → a picker over the game, pre-highlighting the monitor with the active window. Null = cancelled.
+        /// </summary>
+        private async System.Threading.Tasks.Task<List<MonitorItem>?> ChooseMonitors(string title, string hint)
+        {
+            var sel = SelectedMonitors.ToList();
+            if (sel.Count <= 1) return sel;
+            var fg = GetForegroundWindow();
+            GetWindowThreadProcessId(fg, out uint pid);
+            var fgMon = fg != IntPtr.Zero && pid != Environment.ProcessId ? MonitorFromWindow(fg, 2) : IntPtr.Zero;
+            var def = sel.FirstOrDefault(m => m.Handle == fgMon) ?? sel.FirstOrDefault(m => m.Screen.Primary) ?? sel[0];
+            var choices = sel.Select(m => new Controls.MonitorPickWindow.Choice(m.Device, m.Index + 1, GameOn(m))).ToList();
+            var picked = await Controls.MonitorPickWindow.Pick(title, hint, choices, def.Device, def.Screen.Bounds);
+            return picked == null ? null : sel.Where(m => picked.Contains(m.Device)).ToList();
         }
 
         /// <summary>Resolution choices up to the selected monitor's own height (the smallest one when several are recorded).</summary>
@@ -344,9 +362,18 @@ namespace GraphiteCompanion
             shotBusy = true;
             try
             {
-                var saved = new List<string>();
+                // shoot first (so the picker itself is not in the picture), then keep only the chosen ones
+                var shots = new List<(MonitorItem m, string file)>();
                 foreach (var m in SelectedMonitors.ToList())
-                    saved.Add(await Svc(m).ScreenshotAsync(BuildOptions(m), GameOn(m), m.Screen.Bounds));
+                    shots.Add((m, await Svc(m).ScreenshotAsync(BuildOptions(m), GameOn(m), m.Screen.Bounds)));
+                var keep = shots.Count > 1 ? await ChooseMonitors("Какой скриншот сохранить?", "Снимки уже сделаны, лишние удалятся.") : shots.Select(s => s.m).ToList();
+                var saved = new List<string>();
+                foreach (var (m, file) in shots)
+                {
+                    if (keep?.Contains(m) == true) { saved.Add(file); continue; }
+                    try { File.Delete(file); var dir = Path.GetDirectoryName(file)!; if (!Directory.EnumerateFileSystemEntries(dir).Any()) Directory.Delete(dir); } catch { }
+                }
+                if (saved.Count == 0) return;
                 NotifyChange(saved.Count > 1 ? $"Скриншоты сохранены ({saved.Count})" : "Скриншот сохранён", "",
                              string.Join(", ", saved.Select(Path.GetFileName)));
             }
@@ -369,11 +396,16 @@ namespace GraphiteCompanion
                 return;
             }
             recBusy = true;
-            SaveReplayText.Text = "Сохраняю…";
             try
             {
-                var jobs = monitors.Where(m => svcs.TryGetValue(m.Device, out var s) && s.BufferRunning)
-                                   .Select(m => svcs[m.Device].SaveReplayAsync(GameOn(m))).ToList();
+                var buffered = monitors.Where(m => svcs.TryGetValue(m.Device, out var s) && s.BufferRunning).ToList();
+                var chosen = buffered.Count > 1
+                    ? await ChooseMonitors("Какой повтор сохранить?", $"Последние {DurationText(settings.ReplaySeconds)} с выбранного монитора.")
+                    : buffered;
+                if (chosen == null) return;
+                chosen = chosen.Where(buffered.Contains).ToList();
+                SaveReplayText.Text = "Сохраняю…";
+                var jobs = chosen.Select(m => svcs[m.Device].SaveReplayAsync(GameOn(m))).ToList();
                 var files = await System.Threading.Tasks.Task.WhenAll(jobs);
                 NotifyChange(files.Length > 1 ? $"Повторы сохранены ({files.Length})" : "Повтор сохранён", "",
                              string.Join(", ", files.Select(Path.GetFileName)));
@@ -409,12 +441,14 @@ namespace GraphiteCompanion
                 else
                 {
                     if (!await EnsureRecorderReady()) return;
+                    var chosen = await ChooseMonitors("Какой монитор записывать?", "Запись идёт, пока не нажмёте клавишу ещё раз. Alt-Tab её не прерывает.");
+                    if (chosen == null || chosen.Count == 0) return;
                     startGame.Clear();
                     recSeconds.Clear();
                     var started = new List<MonitorItem>();
                     try
                     {
-                        foreach (var m in SelectedMonitors.ToList())
+                        foreach (var m in chosen)
                         {
                             startGame[m.Device] = GameOn(m);
                             Svc(m).StartRecording(BuildOptions(m), startGame[m.Device]);

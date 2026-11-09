@@ -47,8 +47,8 @@ namespace GraphiteCompanion.Services
             logSuffix = id;
         }
 
-        /// <summary>Added to file names when several monitors are recorded at once, e.g. "монитор 2".</summary>
-        public string Tag { get; set; } = "";
+        /// <summary>Top folder of this monitor inside the recordings folder, e.g. "Монитор 2".</summary>
+        public string MonitorName { get; set; } = "Монитор 1";
 
         private readonly JobObject job = new();
         private RecordingAudio? audio;
@@ -187,7 +187,7 @@ namespace GraphiteCompanion.Services
                 string listFile = Path.Combine(snap, "list.txt");
                 await File.WriteAllTextAsync(listFile, list.ToString());
                 Directory.CreateDirectory(opts.Folder);
-                string target = UniquePath(opts.Folder, VideoDir, title, DateTime.Now, Tag);
+                string target = UniquePath(opts.Folder, VideoDir, title, DateTime.Now);
                 int code = await FfmpegInstaller.RunAsync($"-y -f concat -safe 0 -i \"{listFile}\" -c copy -movflags +faststart \"{target}\"", 120000);
                 if (code != 0 || !File.Exists(target)) throw new IOException("FFmpeg не смог собрать ролик");
                 return target;
@@ -208,7 +208,7 @@ namespace GraphiteCompanion.Services
             Directory.CreateDirectory(o.Folder);
             recordRoot = o.Folder;
             recordStarted = DateTime.Now;
-            recordTemp = Path.ChangeExtension(UniquePath(o.Folder, VideoDir, title, recordStarted, Tag), ".recording.mp4");
+            recordTemp = Path.ChangeExtension(UniquePath(o.Folder, VideoDir, title, recordStarted), ".recording.mp4");
             string args = Inputs(o) + Encode(o).Replace("-map 0:v", "-map [v]") +
                           $" -movflags +frag_keyframe+empty_moov+default_base_moof \"{recordTemp}\"";
             recordProc = Launch(args, o.SystemSound || o.Microphone, $"record-{logSuffix}.log");
@@ -225,7 +225,7 @@ namespace GraphiteCompanion.Services
             recordTemp = recordRoot = null;
             if (temp == null || root == null || !File.Exists(temp)) return null;
             // the folder is chosen now: the game that was really played, not what happened to be in front at the start
-            string target = UniquePath(root, VideoDir, game, recordStarted, Tag);
+            string target = UniquePath(root, VideoDir, game, recordStarted);
             await Task.Delay(300);
             int code = await FfmpegInstaller.RunAsync($"-y -i \"{temp}\" -c copy -movflags +faststart \"{target}\"", 600000);
             if (code == 0 && File.Exists(target)) { try { File.Delete(temp); } catch { } return target; }
@@ -237,15 +237,15 @@ namespace GraphiteCompanion.Services
 
         // ---------------- helpers ----------------
 
-        public const string VideoDir = "Видео", ShotDir = "Скриншоты";
+        public const string VideoDir = "Видео", ShotDir = "Фото";
 
-        /// <summary>Layout: <root>/Видео/<программа>/… and <root>/Скриншоты/<программа>/…</summary>
-        private static string UniquePath(string root, string kind, string game, DateTime when, string tag = "")
+        /// <summary>Layout: <root>/Монитор N/Видео/<программа>/… and <root>/Монитор N/Фото/<программа>/…</summary>
+        private string UniquePath(string root, string kind, string game, DateTime when)
         {
             string name = SafeName(game);
-            string folder = Path.Combine(root, kind, name);
+            string folder = Path.Combine(root, SafeName(MonitorName), kind, name);
             Directory.CreateDirectory(folder);
-            string file = $"{name} {when.ToString("yyyy-MM-dd HH-mm-ss", CultureInfo.InvariantCulture)}" + (tag.Length > 0 ? $" ({tag})" : "");
+            string file = $"{name} {when.ToString("yyyy-MM-dd HH-mm-ss", CultureInfo.InvariantCulture)}";
             string path = Path.Combine(folder, file + ".mp4");
             for (int i = 2; File.Exists(path); i++) path = Path.Combine(folder, $"{file} ({i}).mp4");
             return path;
@@ -261,7 +261,7 @@ namespace GraphiteCompanion.Services
         /// <summary>Screenshot of one monitor as PNG in the game's folder (FFmpeg sees games that GDI shows black).</summary>
         public async Task<string> ScreenshotAsync(RecordOptions o, string game, System.Drawing.Rectangle bounds)
         {
-            string path = UniquePath(o.Folder, ShotDir, game, DateTime.Now, Tag);
+            string path = UniquePath(o.Folder, ShotDir, game, DateTime.Now);
             path = Path.ChangeExtension(path, ".png");
             if (FfmpegInstaller.Installed)
             {
