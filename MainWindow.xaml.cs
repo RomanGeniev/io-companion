@@ -381,8 +381,10 @@ namespace GraphiteCompanion
             PageEffects.Visibility = tab == "Effects" ? Visibility.Visible : Visibility.Collapsed;
             PageMic.Visibility = tab == "Mic" ? Visibility.Visible : Visibility.Collapsed;
             PageAuto.Visibility = tab == "Auto" ? Visibility.Visible : Visibility.Collapsed;
+            PageMixer.Visibility = tab == "Mixer" ? Visibility.Visible : Visibility.Collapsed;
+            if (tab == "Mixer") RefreshMixer();
             if (initialized)
-                AnimatePage(tab switch { "Eq" => PageEq, "Effects" => PageEffects, "Mic" => PageMic, _ => PageAuto });
+                AnimatePage(tab switch { "Eq" => PageEq, "Effects" => PageEffects, "Mic" => PageMic, "Mixer" => PageMixer, _ => PageAuto });
             if (tab == "Eq") Dispatcher.BeginInvoke(new Action(DrawCurve), DispatcherPriority.Loaded);
             UpdateMeters();
         }
@@ -482,6 +484,7 @@ namespace GraphiteCompanion
             bool edited = settings.ActiveCustom == null && settings.Edited.ContainsKey(CurrentKey);
             PresetTitle.Text = PresetTitleText() + (edited ? " · изменён" : "");
             ResetButton.IsEnabled = edited;
+            if (initialized) UpdateDiscord();
             tray.UpdateState(settings.Earpad, settings.ActiveCustom == null ? settings.Mode : null,
                              settings.EqEnabled, PresetTitleText());
         }
@@ -609,6 +612,7 @@ namespace GraphiteCompanion
         {
             if (++pollTick % 3 == 0 || session == null) RefreshDevices(force: false);
             PollMic();
+            if (initialized) FunTick();
             if (session == null || !session.HasVolume) return;
             try
             {

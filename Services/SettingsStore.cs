@@ -61,6 +61,11 @@ namespace GraphiteCompanion.Services
         /// <summary>Device id → "Headphones" / "Speakers" chosen by the user.</summary>
         public Dictionary<string, DeviceKind> DeviceKinds { get; set; } = new();
 
+        public bool DiscordEnabled { get; set; }
+        public string? DiscordAppId { get; set; }
+        /// <summary>Remembered per-program volume (process name → 0..100).</summary>
+        public Dictionary<string, int> AppVolumes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
         public string Theme { get; set; } = "Dark";
         public string Accent { get; set; } = "Violet";
         public bool FullscreenMovies { get; set; } = true;

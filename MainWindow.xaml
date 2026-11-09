@@ -187,6 +187,13 @@
                                 </StackPanel>
                             </Button>
                         </Grid>
+                        <Button Style="{StaticResource AccentButton}" Margin="0,8,0,0" HorizontalAlignment="Stretch" Click="AutoEq_Click"
+                                ToolTip="Пресет, выравнивающий звук вашей модели наушников (открытая база AutoEq, ~5000 моделей)">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE721;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
+                                <TextBlock Text="Пресет под мои наушники" Margin="8,0,0,0"/>
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                 </Border>
 
@@ -216,6 +223,14 @@
                         <CheckBox x:Name="OsdSwitch" Style="{StaticResource Switch}" Content="Подсказка на экране (поверх игр)" Click="OsdSwitch_Click"
                                   ToolTip="Вместо уведомлений Windows — короткая надпись по центру экрана"/>
                         <CheckBox x:Name="MicSoundsSwitch" Style="{StaticResource Switch}" Content="Звук при выключении микрофона" Click="MicSoundsSwitch_Click"/>
+                        <CheckBox x:Name="DiscordSwitch" Style="{StaticResource Switch}" Content="Статус в Discord" Click="DiscordSwitch_Click"
+                                  ToolTip="В профиле Discord видно «IO Companion · Игры»"/>
+                        <StackPanel x:Name="DiscordSetup" Visibility="Collapsed" Margin="0,2,0,6">
+                            <TextBlock FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"
+                                       Text="Application ID приложения Discord (discord.com/developers → New Application → скопировать Application ID):"/>
+                            <TextBox x:Name="DiscordIdBox" Margin="0,6,0,0" Padding="6,4" LostFocus="DiscordIdBox_LostFocus"/>
+                            <TextBlock x:Name="DiscordStatus" Margin="0,6,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"/>
+                        </StackPanel>
                         <Button x:Name="AudioCenterAutostartButton" Style="{StaticResource GhostButton}" Margin="0,6,0,6" HorizontalAlignment="Stretch"
                                 Click="AudioCenterAutostart_Click" Visibility="Collapsed"
                                 ToolTip="Официальный Audio Center запускается с Windows и может перезаписывать ваши настройки звука">
@@ -274,6 +289,12 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE945;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
                             <TextBlock Text="Авто" Margin="8,0,0,0"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="TabMixer" GroupName="Tab" Style="{StaticResource Segment}" Width="150" Tag="Mixer" Checked="Tab_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE9F5;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
+                            <TextBlock Text="Микшер" Margin="8,0,0,0"/>
                         </StackPanel>
                     </RadioButton>
                 </StackPanel>
@@ -641,6 +662,30 @@
                             </Button>
                         </StackPanel>
                     </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ===== Page: per-program volume ===== -->
+            <ScrollViewer x:Name="PageMixer" Grid.Row="2" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <Border Style="{StaticResource Card}" Padding="20,18">
+                        <Grid>
+                            <StackPanel Margin="0,0,140,0">
+                                <TextBlock Text="Громкость программ" FontSize="19" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="MixerHint" Margin="0,3,0,0" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"
+                                           Text="Программы, которые сейчас играют звук на выбранном устройстве. Громкость запоминается и восстанавливается при следующем запуске программы."/>
+                            </StackPanel>
+                            <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource GhostButton}" Click="MixerRefresh_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE72C;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Обновить" Margin="8,0,0,0"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                    </Border>
+                    <StackPanel x:Name="MixerList"/>
+                    <TextBlock x:Name="MixerEmpty" Margin="4,4,0,0" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Visibility="Collapsed"
+                               Text="Сейчас ни одна программа не воспроизводит звук на этом устройстве. Включите музыку, игру или видео — и нажмите «Обновить»."/>
                 </StackPanel>
             </ScrollViewer>
 

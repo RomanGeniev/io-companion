@@ -42,6 +42,7 @@ namespace GraphiteCompanion
             InitAppearance();
             InitUpdates();
             InitDriver();
+            InitFun();
             UpdateBrand();
             UpdateMeters();
         }
@@ -49,6 +50,7 @@ namespace GraphiteCompanion
         private void DisposeFeatures()
         {
             visualTimer?.Stop();
+            DisposeFun();
             analyzer.Dispose();
             micMeter.Dispose();
         }

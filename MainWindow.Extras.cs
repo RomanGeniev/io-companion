@@ -263,6 +263,7 @@ namespace GraphiteCompanion
                 row.ColumnDefinitions.Add(new ColumnDefinition());
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
                 row.Children.Add(new TextBlock
                 {
@@ -301,7 +302,17 @@ namespace GraphiteCompanion
                     Content = new TextBlock { Text = "", FontFamily = (FontFamily)FindResource("IconFont") },
                 };
                 del.Click += (_, _) => { settings.Rules.Remove(r); RebuildRules(); ScheduleSave(); };
-                Grid.SetColumn(del, 3);
+                Grid.SetColumn(del, 4);
+
+                var profile = new Button
+                {
+                    Style = (Style)FindResource("GhostButton"), Margin = new Thickness(8, 0, 0, 0),
+                    ToolTip = "Свой профиль: отдельный пресет и эффекты только для этой программы",
+                    Content = new TextBlock { Text = r.Target.StartsWith("custom:Игра:") ? "Свой ✓" : "Свой профиль", FontSize = 12 },
+                };
+                profile.Click += (_, _) => { MakeGameProfile(r); RebuildRules(); };
+                Grid.SetColumn(profile, 3);
+                row.Children.Add(profile);
                 row.Children.Add(del);
 
                 RulesPanel.Children.Add(new Border
