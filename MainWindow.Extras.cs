@@ -304,13 +304,30 @@ namespace GraphiteCompanion
                 del.Click += (_, _) => { settings.Rules.Remove(r); RebuildRules(); ScheduleSave(); };
                 Grid.SetColumn(del, 4);
 
+                bool hasOwn = r.Target.StartsWith("custom:Игра:");
                 var profile = new Button
                 {
                     Style = (Style)FindResource("GhostButton"), Margin = new Thickness(8, 0, 0, 0),
-                    ToolTip = "Свой профиль: отдельный пресет и эффекты только для этой программы",
-                    Content = new TextBlock { Text = r.Target.StartsWith("custom:Игра:") ? "Свой ✓" : "Свой профиль", FontSize = 12 },
+                    ToolTip = hasOwn
+                        ? "Открыть эквалайзер с отдельным звуком этой программы и подстроить его"
+                        : "Сделать для этой программы отдельный звук: копия текущих настроек, которую можно подстроить только под неё",
+                    Content = new TextBlock { Text = hasOwn ? "Настроить звук" : "Отдельный звук…", FontSize = 12 },
                 };
-                profile.Click += (_, _) => { MakeGameProfile(r); RebuildRules(); };
+                profile.Click += (_, _) =>
+                {
+                    if (hasOwn) { OpenGameProfile(r); return; }
+                    string app = string.IsNullOrEmpty(r.Title) ? r.Process : r.Title;
+                    var answer = MessageBox.Show(this,
+                        $"Сделать для «{app}» отдельный звук?\n\n" +
+                        $"Я создам пресет «Игра: {app}» из текущих настроек эквалайзера и эффектов и включу его для этой программы. " +
+                        "Остальные программы и ваши пресеты не изменятся.\n\n" +
+                        "Потом нажмите «Настроить звук» в этой строке, чтобы подстроить его. Вернуть всё обратно можно, выбрав в списке другой пресет.",
+                        "Отдельный звук для программы", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    if (answer != MessageBoxResult.Yes) return;
+                    MakeGameProfile(r);
+                    RebuildRules();
+                    NotifyChange("Отдельный звук создан", "", r.Target[7..]);
+                };
                 Grid.SetColumn(profile, 3);
                 row.Children.Add(profile);
                 row.Children.Add(del);
@@ -467,6 +484,33 @@ namespace GraphiteCompanion
             RuleProcess.Text = "";
             RebuildRules();
             ScheduleSave();
+        }
+
+        private void AddApp_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new AddAppWindow(this, TargetItems().Select(t => (t.Label, t.Value)).ToList(), PresetTitleText());
+            if (dlg.ShowDialog() != true || dlg.ProcessName.Length == 0) return;
+
+            var rule = new AppRule { Process = dlg.ProcessName, Target = dlg.Target == AddAppWindow.OwnSound ? "mode:Games" : dlg.Target };
+            settings.Rules.RemoveAll(r => r.Display.Equals(rule.Display, StringComparison.OrdinalIgnoreCase));
+            settings.Rules.Add(rule);
+            if (dlg.Target == AddAppWindow.OwnSound) MakeGameProfile(rule);
+            RebuildRules();
+            ScheduleSave();
+            NotifyChange("Программа добавлена", "", $"{rule.Process} → {TargetLabel(rule.Target)}");
+        }
+
+        /// <summary>Opens the equalizer on the program's own preset so it can be tuned.</summary>
+        private void OpenGameProfile(AppRule rule)
+        {
+            string name = rule.Target[7..];
+            if (!settings.Custom.Any(c => c.Name == name)) return;
+            ForgetAutoState();
+            settings.ActiveCustom = name;
+            LoadPresetToUi();
+            ScheduleSave();
+            TabEq.IsChecked = true;
+            NotifyChange("Настройте звук под программу", "", $"Изменения сохраняются в «{name}»");
         }
 
         private void ResetRules_Click(object sender, RoutedEventArgs e)

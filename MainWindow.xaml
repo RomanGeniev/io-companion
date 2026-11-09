@@ -656,8 +656,17 @@
 
                     <Border Style="{StaticResource Card}" Padding="20,18">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource CardTitle}" Text="ДОБАВИТЬ ПРАВИЛО"/>
-                            <Grid>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="ПРОГРАММЫ И ИГРЫ"/>
+                            <TextBlock Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,0,0,12"
+                                       Text="Выберите программу или игру и звук для неё — он включится сам, пока она на экране. Для каждой программы в списке ниже можно сменить пресет или сделать отдельный звук."/>
+                            <Button Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Click="AddApp_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE710;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Добавить программу…" Margin="8,0,0,0"/>
+                                </StackPanel>
+                            </Button>
+                            <Expander Header="Дополнительно: правило по заголовку окна или имени" Margin="0,14,0,0" Foreground="{DynamicResource SubTextBrush}">
+                            <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="170"/>
                                     <ColumnDefinition Width="10"/>
@@ -681,7 +690,8 @@
                                     </StackPanel>
                                 </Button>
                             </Grid>
-                            <TextBlock Style="{StaticResource CardTitle}" Text="ПРАВИЛА" Margin="0,20,0,8"/>
+                            </Expander>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="ВАШИ ПРОГРАММЫ" Margin="0,20,0,8"/>
                             <StackPanel x:Name="RulesPanel"/>
                             <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,10,0,0" Click="ResetRules_Click">
                                 <StackPanel Orientation="Horizontal">

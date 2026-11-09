@@ -434,7 +434,8 @@ namespace GraphiteCompanion
             var custom = ActiveCustom;
             if (custom != null)
             {
-                if (custom.Name == draftCopy) { custom.Bands = (int[])bands.Clone(); return; }
+                // a program's own sound ("Игра: …") is meant to be tuned in place
+                if (custom.Name == draftCopy || custom.Name.StartsWith("Игра: ")) { custom.Bands = (int[])bands.Clone(); return; }
                 if (bands.SequenceEqual(custom.Bands)) return;
                 // saved presets are never overwritten: any change goes into a new copy
                 string baseName = custom.Name, name = baseName + " (копия)";

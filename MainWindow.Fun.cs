@@ -78,10 +78,6 @@ namespace GraphiteCompanion
             rule.Target = "custom:" + name;
             RefreshCustomList();
             ScheduleSave();
-            MessageBox.Show(this,
-                $"Создан пресет «{name}» из текущих настроек.\n\nТеперь при запуске этой программы включится именно он. " +
-                "Чтобы настроить звук под неё: выберите этот пресет в «Моих пресетах» и подвигайте эквалайзер и эффекты — всё сохранится в нём.",
-                "Свой профиль", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         // ===================== Per-program volume =====================
