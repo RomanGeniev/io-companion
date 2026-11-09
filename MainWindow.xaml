@@ -754,53 +754,41 @@
                     <!-- settings -->
                     <Border Style="{StaticResource Card}" Padding="20,18">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource CardTitle}" Text="ДЛИТЕЛЬНОСТЬ ПОВТОРА"/>
-                            <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4">
-                                <UniformGrid x:Name="DurationGrid" Columns="5"/>
-                            </Border>
-
-                            <TextBlock Style="{StaticResource CardTitle}" Text="РАЗРЕШЕНИЕ" Margin="0,16,0,10"/>
-                            <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4">
-                                <UniformGrid x:Name="ResolutionGrid" Columns="5"/>
-                            </Border>
-
-                            <Grid Margin="0,16,0,0">
+                            <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="16"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Style="{StaticResource CardTitle}" Text="КАДРОВ В СЕКУНДУ"/>
-                                    <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4">
-                                        <UniformGrid x:Name="FpsGrid" Columns="3"/>
-                                    </Border>
+                                    <StackPanel x:Name="DurationTitle" Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource CardTitle}" Text="ДЛИТЕЛЬНОСТЬ ПОВТОРА"/>
+                                    </StackPanel>
+                                    <ComboBox x:Name="DurationCombo" DisplayMemberPath="Label"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Style="{StaticResource CardTitle}" Text="КАЧЕСТВО"/>
-                                    <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4">
-                                        <UniformGrid x:Name="QualityGrid" Columns="3"/>
-                                    </Border>
-                                </StackPanel>
-                            </Grid>
-
-                            <Grid Margin="0,16,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="16"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Style="{StaticResource CardTitle}" Text="МОНИТОР"/>
-                                    <StackPanel x:Name="MonitorPanel"/>
-                                    <TextBlock x:Name="MonitorHint" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <TextBlock Style="{StaticResource CardTitle}" Text="ЗВУК"/>
+                                    <StackPanel x:Name="SoundTitle" Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource CardTitle}" Text="ЗВУК В РОЛИКЕ"/>
+                                    </StackPanel>
                                     <CheckBox x:Name="RecSystemSwitch" Style="{StaticResource Switch}" Content="Звук компьютера" Click="RecSetting_Changed"/>
                                     <CheckBox x:Name="RecMicSwitch" Style="{StaticResource Switch}" Content="Микрофон" Click="RecSetting_Changed"/>
                                 </StackPanel>
                             </Grid>
+
+                            <Grid Margin="0,18,0,8">
+                                <StackPanel x:Name="MonitorsTitle" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource CardTitle}" Text="МОНИТОРЫ И КАЧЕСТВО ЗАПИСИ" Margin="0"/>
+                                </StackPanel>
+                                <Button HorizontalAlignment="Right" Style="{StaticResource GhostButton}" Click="IdentifyMonitors_Click"
+                                        ToolTip="На каждом мониторе на 3 секунды появится его номер">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE7F4;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Показать номера" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                            <StackPanel x:Name="MonitorPanel"/>
+                            <TextBlock x:Name="MonitorHint" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="2,6,0,0"/>
 
                             <TextBlock Style="{StaticResource CardTitle}" Text="ПАПКА ДЛЯ РОЛИКОВ" Margin="0,16,0,8"/>
                             <Grid>

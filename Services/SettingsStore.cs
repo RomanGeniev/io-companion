@@ -9,6 +9,14 @@ using Microsoft.Win32;
 
 namespace GraphiteCompanion.Services
 {
+    /// <summary>Recording settings of one monitor.</summary>
+    public sealed class MonitorRecordSettings
+    {
+        public int Height { get; set; }        // 0 = as on screen
+        public int Fps { get; set; } = 60;
+        public int Quality { get; set; } = 1;  // 0 low, 1 medium, 2 high
+    }
+
     public sealed class CustomPreset
     {
         public string Name { get; set; } = "";
@@ -85,6 +93,7 @@ namespace GraphiteCompanion.Services
         public int RecordQuality { get; set; } = 1;    // 0 low, 1 medium, 2 high
         public string? RecordMonitor { get; set; }     // legacy single monitor, migrated to RecordMonitors
         public List<string>? RecordMonitors { get; set; } // Screen.DeviceName of every monitor to record, null = primary only
+        public Dictionary<string, MonitorRecordSettings>? RecordPerMonitor { get; set; } // Screen.DeviceName → own resolution / fps / quality
         public bool RecordSystemSound { get; set; } = true;
         public bool RecordMicrophone { get; set; }
 

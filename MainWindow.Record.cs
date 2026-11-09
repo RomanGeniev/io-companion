@@ -33,14 +33,18 @@ namespace GraphiteCompanion
         private sealed class MonitorItem
         {
             public string Device = "";
-            public int Index;
+            public int Index;                  // 0-based; monitors are numbered left to right
             public string Label { get; init; } = "";
+            public string Details = "";        // "2560×1440 · основной · слева"
             public WF.Screen Screen = null!;
             public IntPtr Handle;
         }
 
+        private sealed record Option(int Value, string Label);
+
         private List<MonitorItem> monitors = new();
         private readonly Dictionary<string, ReplayService> svcs = new();   // one recorder per monitor
+        private readonly Dictionary<string, ComboBox[]> monitorCombos = new();
         private IEnumerable<MonitorItem> SelectedMonitors => monitors.Where(m => settings.RecordMonitors?.Contains(m.Device) == true);
 
         private ReplayService Svc(MonitorItem m)
@@ -59,21 +63,61 @@ namespace GraphiteCompanion
         private static readonly int[] Durations = { 15, 30, 60, 120, 300 };
         private static readonly int[] Heights = { 0, 2160, 1440, 1080, 720 };
         private static readonly int[] Fpss = { 30, 60, 120 };
+        private static readonly string[] QualityNames = { "Низкое", "Среднее", "Высокое" };
+
+        private const string TipDuration =
+            "Сколько последних секунд программа постоянно держит наготове. По клавише повтора они сохраняются в ролик — " +
+            "удобно, когда интересный момент уже случился. Больше секунд — больше места на диске под временный буфер.";
+        private const string TipSound =
+            "Звук компьютера — всё, что вы слышите в наушниках (игра, Discord, музыка). Микрофон — ваш голос. Можно включить оба.";
+        private const string TipMonitors =
+            "Мониторы пронумерованы слева направо, как они стоят в настройках Windows. Нажмите «Показать номера» — " +
+            "на каждом экране появится его номер. Включите мониторы, которые хотите записывать, и задайте каждому своё качество.";
+        private const string TipResolution =
+            "Разрешение — сколько точек в кадре (размер картинки). 1080p = 1920×1080. Меньше разрешение — мельче картинка, " +
+            "меньше файл и нагрузка на видеокарту. «Как на экране» — без уменьшения.";
+        private const string TipFps =
+            "Кадров в секунду — плавность движения. 60 — обычный выбор для игр. 120 — очень плавно, подходит для быстрых игр " +
+            "и замедленного просмотра, но файл больше. 30 — экономно, для спокойных программ.";
+        private const string TipQuality =
+            "Качество — насколько бережно сжимается каждый кадр при том же разрешении. Высокое — меньше «мыла» и квадратиков " +
+            "в динамичных сценах, но файл крупнее. Разрешение задаёт размер картинки, а качество — её чёткость.";
 
         private string RecFolder =>
             settings.ReplayFolder ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "IO Companion");
 
+        private static string DurationLabel(int d) => d < 60 ? $"{d} секунд" : d == 60 ? "1 минута" : d < 300 ? $"{d / 60} минуты" : $"{d / 60} минут";
+
+        /// <summary>Own resolution / fps / quality of a monitor; new monitors start from the old common settings.</summary>
+        private MonitorRecordSettings Rec(MonitorItem m)
+        {
+            settings.RecordPerMonitor ??= new();
+            if (!settings.RecordPerMonitor.TryGetValue(m.Device, out var r))
+                settings.RecordPerMonitor[m.Device] = r = new MonitorRecordSettings { Height = settings.RecordHeight, Fps = settings.RecordFps, Quality = settings.RecordQuality };
+            if (r.Height >= m.Screen.Bounds.Height) r.Height = 0;
+            if (!Fpss.Contains(r.Fps)) r.Fps = 60;
+            r.Quality = Math.Clamp(r.Quality, 0, 2);
+            return r;
+        }
+
         private void InitRecord()
         {
-            Segments(DurationGrid, Durations, d => d < 60 ? $"{d} с" : $"{d / 60} мин", settings.ReplaySeconds, v => settings.ReplaySeconds = v);
-            Segments(FpsGrid, Fpss, f => $"{f}", settings.RecordFps, v => settings.RecordFps = v);
-            Segments(QualityGrid, new[] { 0, 1, 2 }, q => q switch { 0 => "Низкое", 1 => "Среднее", _ => "Высокое" },
-                     settings.RecordQuality, v => settings.RecordQuality = v);
+            DurationCombo.ItemsSource = Durations.Select(d => new Option(d, DurationLabel(d))).ToList();
+            DurationCombo.SelectedItem = ((List<Option>)DurationCombo.ItemsSource).FirstOrDefault(o => o.Value == settings.ReplaySeconds);
+            DurationCombo.SelectionChanged += (_, _) =>
+            {
+                if (DurationCombo.SelectedItem is Option o) { settings.ReplaySeconds = o.Value; RecSettingsChanged(); }
+            };
+            DurationTitle.Children.Add(Info(TipDuration));
+            SoundTitle.Children.Add(Info(TipSound));
+            MonitorsTitle.Children.Add(Info(TipMonitors));
 
-            monitors = WF.Screen.AllScreens.Select((s, i) => new MonitorItem
+            var screens = WF.Screen.AllScreens.OrderBy(s => s.Bounds.Left).ThenBy(s => s.Bounds.Top).ToList();
+            monitors = screens.Select((s, i) => new MonitorItem
             {
                 Device = s.DeviceName, Screen = s, Index = i,
-                Label = $"Монитор {i + 1} · {s.Bounds.Width}×{s.Bounds.Height}" + (s.Primary ? " (основной)" : ""),
+                Label = $"Монитор {i + 1}",
+                Details = $"{s.Bounds.Width}×{s.Bounds.Height}" + (s.Primary ? " · основной" : "") + Position(i, screens.Count),
                 Handle = MonitorFromPoint(new System.Drawing.Point(s.Bounds.Left + s.Bounds.Width / 2, s.Bounds.Top + s.Bounds.Height / 2), 2),
             }).ToList();
             // older versions stored one monitor; now it is a list (at least one is always selected)
@@ -81,16 +125,8 @@ namespace GraphiteCompanion
                 .Where(d => monitors.Any(m => m.Device == d)).Distinct().ToList();
             if (sel.Count == 0) sel.Add((monitors.FirstOrDefault(m => m.Screen.Primary) ?? monitors[0]).Device);
             settings.RecordMonitors = sel;
-            MonitorPanel.Children.Clear();
-            foreach (var m in monitors)
-            {
-                var cb = new CheckBox { Content = m.Label, IsChecked = sel.Contains(m.Device), Tag = m };
-                cb.SetResourceReference(StyleProperty, "Switch");
-                cb.Click += MonitorCheck_Click;
-                MonitorPanel.Children.Add(cb);
-            }
+            BuildMonitorRows();
             UpdateMonitorHint();
-            BuildResolutions();
 
             RecSystemSwitch.IsChecked = settings.RecordSystemSound;
             RecMicSwitch.IsChecked = settings.RecordMicrophone;
@@ -107,6 +143,9 @@ namespace GraphiteCompanion
             UpdateRecStatus();
         }
 
+        private static string Position(int i, int count) =>
+            count < 2 ? "" : i == 0 ? " · слева" : i == count - 1 ? " · справа" : count == 3 ? " · по центру" : $" · {i + 1}-й слева";
+
         private string RegFirst(Action action, params (uint mods, uint key, string label)[] options)
         {
             foreach (var o in options)
@@ -114,42 +153,120 @@ namespace GraphiteCompanion
             return "не назначено";
         }
 
-        private void Segments(UniformGrid grid, int[] values, Func<int, string> label, int current, Action<int> set)
+        /// <summary>Small "i" next to a title: hint on hover (shows quickly) or on click / press-and-hold.</summary>
+        private FrameworkElement Info(string text)
         {
-            grid.Children.Clear();
-            string group = grid.Name;
-            foreach (int v in values)
+            var icon = new TextBlock
             {
-                int value = v;
-                var rb = new RadioButton { GroupName = group, Content = label(v), IsChecked = v == current };
-                rb.SetResourceReference(StyleProperty, "Segment");
-                rb.Click += (_, _) => { set(value); RecSettingsChanged(); };
-                grid.Children.Add(rb);
+                Text = "", FontSize = 13, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Top,
+                Cursor = System.Windows.Input.Cursors.Help, Background = System.Windows.Media.Brushes.Transparent,
+                FontFamily = (System.Windows.Media.FontFamily)FindResource("IconFont"),
+            };
+            icon.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
+            var tip = new ToolTip { Content = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 340 } };
+            icon.ToolTip = tip;
+            ToolTipService.SetInitialShowDelay(icon, 150);
+            ToolTipService.SetShowDuration(icon, 60000);
+            icon.MouseLeftButtonDown += (_, e) => { tip.PlacementTarget = icon; tip.IsOpen = true; e.Handled = true; };
+            icon.MouseLeave += (_, _) => tip.IsOpen = false;
+            return icon;
+        }
+
+        private static TextBlock Head(string text) => new() { Text = text, FontSize = 11, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+
+        /// <summary>One row per monitor: switch (record it or not) + its own resolution, fps and quality.</summary>
+        private void BuildMonitorRows()
+        {
+            MonitorPanel.Children.Clear();
+            monitorCombos.Clear();
+
+            Grid Row()
+            {
+                var g = new Grid();
+                foreach (var w in new[] { new GridLength(1, GridUnitType.Star), new GridLength(10), new GridLength(210), new GridLength(10), new GridLength(84), new GridLength(10), new GridLength(116) })
+                    g.ColumnDefinitions.Add(new ColumnDefinition { Width = w });
+                return g;
             }
+            void Put(Grid g, UIElement e, int col) { Grid.SetColumn(e, col); g.Children.Add(e); }
+            StackPanel Titled(string t, string tip) { var p = new StackPanel { Orientation = Orientation.Horizontal }; var h = Head(t); h.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush"); p.Children.Add(h); p.Children.Add(Info(tip)); return p; }
+
+            var header = Row();
+            header.Margin = new Thickness(12, 0, 12, 6);
+            Put(header, Titled("РАЗРЕШЕНИЕ", TipResolution), 2);
+            Put(header, Titled("КАДРОВ/С", TipFps), 4);
+            Put(header, Titled("КАЧЕСТВО", TipQuality), 6);
+            MonitorPanel.Children.Add(header);
+
+            foreach (var m in monitors)
+            {
+                var r = Rec(m);
+                var row = Row();
+                var title = new StackPanel();
+                title.Children.Add(new TextBlock { Text = m.Label, FontWeight = FontWeights.SemiBold });
+                var det = new TextBlock { Text = m.Details, FontSize = 12 };
+                det.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
+                title.Children.Add(det);
+                var sw = new CheckBox { Content = title, IsChecked = settings.RecordMonitors!.Contains(m.Device), Tag = m, VerticalAlignment = VerticalAlignment.Center };
+                sw.SetResourceReference(StyleProperty, "Switch");
+                sw.Click += MonitorCheck_Click;
+                Put(row, sw, 0);
+
+                int native = m.Screen.Bounds.Height;
+                var res = Combo(Heights.Where(h => h == 0 || h < native).Select(h => new Option(h, h == 0 ? $"Как на экране ({native}p)" : $"{h}p")), r.Height, v => r.Height = v);
+                var fps = Combo(Fpss.Select(f => new Option(f, $"{f}")), r.Fps, v => r.Fps = v);
+                var q = Combo(Enumerable.Range(0, 3).Select(i => new Option(i, QualityNames[i])), r.Quality, v => r.Quality = v);
+                Put(row, res, 2); Put(row, fps, 4); Put(row, q, 6);
+                monitorCombos[m.Device] = new[] { res, fps, q };
+
+                var card = new Border { CornerRadius = new CornerRadius(10), Padding = new Thickness(12, 8, 12, 8), Margin = new Thickness(0, 0, 0, 6), Child = row };
+                card.SetResourceReference(Border.BackgroundProperty, "InsetBrush");
+                MonitorPanel.Children.Add(card);
+            }
+            UpdateMonitorEnabled();
+        }
+
+        private ComboBox Combo(IEnumerable<Option> options, int current, Action<int> set)
+        {
+            var list = options.ToList();
+            var cb = new ComboBox { ItemsSource = list, DisplayMemberPath = "Label", VerticalAlignment = VerticalAlignment.Center };
+            cb.SelectedItem = list.FirstOrDefault(o => o.Value == current) ?? list[0];
+            cb.SelectionChanged += (_, _) => { if (cb.SelectedItem is Option o) { set(o.Value); RecSettingsChanged(); } };
+            return cb;
+        }
+
+        private void UpdateMonitorEnabled()
+        {
+            foreach (var (dev, combos) in monitorCombos)
+                foreach (var c in combos) c.IsEnabled = settings.RecordMonitors?.Contains(dev) == true;
         }
 
         private void MonitorCheck_Click(object sender, RoutedEventArgs e)
         {
             var cb = (CheckBox)sender;
-            var list = MonitorPanel.Children.OfType<CheckBox>().Where(c => c.IsChecked == true).Select(c => ((MonitorItem)c.Tag).Device).ToList();
+            var switches = MonitorPanel.Children.OfType<Border>().Select(b => ((Grid)b.Child).Children.OfType<CheckBox>().First()).ToList();
+            var list = switches.Where(c => c.IsChecked == true).Select(c => ((MonitorItem)c.Tag).Device).ToList();
             if (list.Count == 0) { cb.IsChecked = true; list.Add(((MonitorItem)cb.Tag).Device); } // can't record nothing
             settings.RecordMonitors = list;
+            UpdateMonitorEnabled();
             UpdateMonitorHint();
-            BuildResolutions();
             RecSettingsChanged();
         }
 
         private void UpdateMonitorHint()
         {
-            MonitorHint.Text = SelectedMonitors.Count() > 1
-                ? "По клавише записи, повтора или скриншота появится выбор: какой монитор сохранить (или все). " +
-                  "Файлы лягут в «Монитор N\\Видео\\Игра» и «Монитор N\\Фото\\Игра»."
-                : "Файлы лягут в «Монитор N\\Видео\\Игра» и «Монитор N\\Фото\\Игра». Игра определяется по окну на этом мониторе.";
+            MonitorHint.Text = (SelectedMonitors.Count() > 1
+                ? "Включено несколько мониторов: по клавише записи, повтора или скриншота появится выбор, какой из них сохранить (или все). "
+                : "") +
+                "Файлы лягут в «Монитор N\\Видео\\Игра» и «Монитор N\\Фото\\Игра»; игра определяется по окну на этом мониторе.";
         }
+
+        private void IdentifyMonitors_Click(object sender, RoutedEventArgs e) =>
+            Controls.MonitorNumbers.Show(monitors.Select(m => (m.Screen.Bounds, m.Index + 1, m.Details.TrimStart(' ', '·'))).ToList(), TimeSpan.FromSeconds(3), centre: true);
 
         /// <summary>
         /// Which of the selected monitors to save. One selected → that one, no question.
-        /// Several → a picker over the game, pre-highlighting the monitor with the active window. Null = cancelled.
+        /// Several → a picker over the game, pre-highlighting the monitor with the active window,
+        /// with each monitor's number shown in its corner meanwhile. Null = cancelled.
         /// </summary>
         private async System.Threading.Tasks.Task<List<MonitorItem>?> ChooseMonitors(string title, string hint)
         {
@@ -159,32 +276,23 @@ namespace GraphiteCompanion
             GetWindowThreadProcessId(fg, out uint pid);
             var fgMon = fg != IntPtr.Zero && pid != Environment.ProcessId ? MonitorFromWindow(fg, 2) : IntPtr.Zero;
             var def = sel.FirstOrDefault(m => m.Handle == fgMon) ?? sel.FirstOrDefault(m => m.Screen.Primary) ?? sel[0];
-            var choices = sel.Select(m => new Controls.MonitorPickWindow.Choice(m.Device, m.Index + 1, GameOn(m))).ToList();
+            var choices = sel.Select(m => new Controls.MonitorPickWindow.Choice(m.Device, m.Index + 1, GameOn(m) + Position(m.Index, monitors.Count))).ToList();
+            using var badges = Controls.MonitorNumbers.Show(sel.Select(m => (m.Screen.Bounds, m.Index + 1, "")).ToList(), null, centre: false);
             var picked = await Controls.MonitorPickWindow.Pick(title, hint, choices, def.Device, def.Screen.Bounds);
             return picked == null ? null : sel.Where(m => picked.Contains(m.Device)).ToList();
-        }
-
-        /// <summary>Resolution choices up to the selected monitor's own height (the smallest one when several are recorded).</summary>
-        private void BuildResolutions()
-        {
-            var sel = SelectedMonitors.ToList();
-            int native = sel.Count > 0 ? sel.Min(m => m.Screen.Bounds.Height) : 1080;
-            var heights = Heights.Where(h => h == 0 || h < native).ToArray();
-            if (!heights.Contains(settings.RecordHeight)) settings.RecordHeight = 0;
-            ResolutionGrid.Columns = heights.Length;
-            Segments(ResolutionGrid, heights, h => h == 0 ? (sel.Count > 1 ? "Как на экране" : $"Как на экране ({native}p)") : $"{h}p", settings.RecordHeight, v => settings.RecordHeight = v);
         }
 
         private RecordOptions BuildOptions(MonitorItem mon)
         {
             var b = mon.Screen.Bounds;
-            int h = settings.RecordHeight >= b.Height ? 0 : settings.RecordHeight, w = 0;
+            var r = Rec(mon);
+            int h = r.Height >= b.Height ? 0 : r.Height, w = 0;
             if (h > 0) w = (int)Math.Round(h * (double)b.Width / b.Height / 2) * 2;
             return new RecordOptions
             {
                 Monitor = mon.Handle,
                 Width = w, Height = h,
-                Fps = settings.RecordFps, Quality = settings.RecordQuality,
+                Fps = r.Fps, Quality = r.Quality,
                 SystemSound = settings.RecordSystemSound, Microphone = settings.RecordMicrophone,
                 ReplaySeconds = settings.ReplaySeconds, Folder = RecFolder,
             };
