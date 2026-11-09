@@ -33,6 +33,14 @@ namespace GraphiteCompanion
                                "В его окне один раз отметьте свои наушники, потом перезагрузите компьютер.";
                 ApoButtonText.Text = "Включить эквалайзер";
             }
+            else if (EqApoController.IsAttached(session!.Info.Id))
+            {
+                // already ticked in Device Selector - nothing to select again
+                apoStep = ApoStep.Reboot;
+                ApoTitle.Text = "Equalizer APO уже подключён к этому устройству";
+                ApoText.Text = "Если эквалайзер ещё не появился — перезагрузите компьютер (Windows подключает его к звуку после перезагрузки).";
+                ApoButtonText.Text = "Перезагрузить";
+            }
             else
             {
                 apoStep = ApoStep.Attach;

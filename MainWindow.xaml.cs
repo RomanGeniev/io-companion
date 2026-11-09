@@ -557,6 +557,14 @@ namespace GraphiteCompanion
                 eq.SetBands(applied, lastWrittenBands);
                 lastWrittenBands = applied;
             }
+            catch (Exception ex) when (eq is EqApoController)
+            {
+                // a busy config file is temporary: keep the connection and try again shortly
+                SettingsStore.LogError(ex);
+                lastWrittenBands = null;
+                lastWrittenEnabled = null;
+                ScheduleApply();
+            }
             catch (Exception ex)
             {
                 SettingsStore.LogError(ex);

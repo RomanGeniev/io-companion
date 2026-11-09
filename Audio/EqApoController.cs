@@ -201,10 +201,28 @@ namespace GraphiteCompanion.Audio
                     $"{f.ToString(CultureInfo.InvariantCulture)} {bands[i].ToString(CultureInfo.InvariantCulture)}")));
                 sb.Append("\r\n");
             }
-            // write to a temp file first so Equalizer APO never reads a half-written config
-            string tmp = OwnPath + ".tmp";
-            File.WriteAllText(tmp, sb.ToString(), Encoding.UTF8);
-            File.Move(tmp, OwnPath, true);
+            WriteWithRetry(OwnPath, Encoding.UTF8.GetBytes(sb.ToString()));
+        }
+
+        /// <summary>
+        /// Equalizer APO (inside the Windows audio engine) re-reads the file right after every change and
+        /// keeps it open for a moment; a write at that instant is refused. Retry briefly instead of failing.
+        /// The content is written in one call, so a partially written file is never left behind.
+        /// </summary>
+        private static void WriteWithRetry(string path, byte[] data)
+        {
+            for (int attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read | FileShare.Delete);
+                    fs.Write(data, 0, data.Length);
+                    break;
+                }
+                catch (IOException) when (attempt < 25) { System.Threading.Thread.Sleep(20); }
+                catch (UnauthorizedAccessException) when (attempt < 25 && File.Exists(path)) { System.Threading.Thread.Sleep(20); }
+            }
+            try { File.Delete(path + ".tmp"); } catch { } // leftover from older versions
         }
 
         // ---------------- IEqualizer ----------------
@@ -213,19 +231,26 @@ namespace GraphiteCompanion.Audio
 
         public bool ReadEnabled() => enabled;
 
+        // "written" is what is actually on disk; on a failed write it stays old, so the next call retries.
+        private bool dirty = true;
+
         public void SetEnabled(bool on)
         {
-            if (enabled == on) return;
+            if (enabled == on && !dirty) return;
             enabled = on;
+            dirty = true;
             Save();
+            dirty = false;
         }
 
         public void SetBands(IReadOnlyList<int> newBands, IReadOnlyList<int>? previous)
         {
             var b = newBands.Select(v => Math.Clamp(v, EqBands.Min, EqBands.Max)).ToArray();
-            if (b.SequenceEqual(bands)) return;
+            if (b.SequenceEqual(bands) && !dirty) return;
             bands = b;
+            dirty = true;
             Save();
+            dirty = false;
         }
 
         public void Dispose() { }
