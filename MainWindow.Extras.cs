@@ -354,19 +354,21 @@ namespace GraphiteCompanion
                 autoBackup ??= (settings.Mode, settings.ActiveCustom);
                 if (autoTarget == rule.Target) return;
                 autoTarget = rule.Target;
+                string before = PresetTitleText();
                 ApplyTarget(rule.Target);
-                NotifyChange(PresetTitleText(), sub: fullscreenVideo ? "Видео на весь экран" : "Автоматически · " + process);
+                if (PresetTitleText() != before) NotifyChange(PresetTitleText(), sub: fullscreenVideo ? "Видео на весь экран" : "Автоматически · " + process);
             }
             else if (autoBackup is { } b)
             {
                 autoBackup = null;
                 autoTarget = null;
+                string before2 = PresetTitleText();
                 applyingAuto = true;
                 settings.Mode = b.mode;
                 settings.ActiveCustom = b.custom != null && settings.Custom.Any(c => c.Name == b.custom) ? b.custom : null;
                 LoadPresetToUi();
                 applyingAuto = false;
-                NotifyChange(PresetTitleText(), sub: "Обычный режим");
+                if (PresetTitleText() != before2) NotifyChange(PresetTitleText(), sub: "Обычный режим");
             }
         }
 
