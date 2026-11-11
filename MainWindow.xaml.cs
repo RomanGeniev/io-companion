@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -107,6 +107,8 @@ namespace GraphiteCompanion
 
             LoadPresetToUi();
             InitFeatures();
+            InitAutoClicker();
+            RefreshPushToTalk();
             HelpTips.Prepare(this);
             initialized = true;
 
@@ -360,6 +362,7 @@ namespace GraphiteCompanion
                 }
             }
 
+            RefreshPushToTalk();
             UpdateMicrophoneControls(target);
             if (!changed) return;
             ReloadEffects();
@@ -417,6 +420,7 @@ namespace GraphiteCompanion
 
         private void CloseMicrophone()
         {
+            DetachPushToTalk();
             // Finish any queued driver writes while they still point to the old endpoint.
             FlushMicVoiceSettings();
             FlushEffects();
@@ -484,6 +488,8 @@ namespace GraphiteCompanion
             foreach (var c in outputCards) c.ResetToDefaults();
         }
 
+        private GalleryPanel? galleryPanel;
+
         private void Tab_Checked(object sender, RoutedEventArgs e)
         {
             string tab = (string)((FrameworkElement)sender).Tag;
@@ -493,9 +499,14 @@ namespace GraphiteCompanion
             if (MixerPopup != null) MixerPopup.IsOpen = false;
             PageRecord.Visibility = tab == "Record" ? Visibility.Visible : Visibility.Collapsed;
             PageSettings.Visibility = tab == "Settings" ? Visibility.Visible : Visibility.Collapsed;
+            if (tab == "Gallery" && galleryPanel == null) PageGallery.Content = galleryPanel = new GalleryPanel(() => RecFolder);
+            PageGallery.Visibility = tab == "Gallery" ? Visibility.Visible : Visibility.Collapsed;
+            PageAutoClicker.Visibility = tab == "AutoClicker" ? Visibility.Visible : Visibility.Collapsed;
             OutputStrip.Visibility = tab is "Eq" or "Effects" ? Visibility.Visible : Visibility.Collapsed;
             (PageTitle.Text, PageDescription.Text) = tab switch
             {
+                "Gallery" => ("Галерея", "Последние записи, повторы и скриншоты."),
+                "AutoClicker" => ("Автокликер", "Настройте клики. Запускайте и останавливайте одной клавишей."),
                 "Mic" => ("Микрофон", "Выберите микрофон, проверьте уровень и послушайте результат."),
                 "Record" => ("Запись экрана", "Видео, мгновенные повторы и скриншоты."),
                 "Effects" => ("Эффекты", "Включайте нужные эффекты и сравнивайте результат на слух."),
@@ -509,7 +520,7 @@ namespace GraphiteCompanion
             }
             if (tab == "Record") UpdateRecStatus();
             if (initialized)
-                AnimatePage(tab switch { "Eq" => PageEq, "Effects" => PageEffects, "Mic" => PageMic, "Record" => PageRecord, "Settings" => PageSettings, _ => PageEq });
+                AnimatePage(tab switch { "Eq" => PageEq, "Effects" => PageEffects, "Mic" => PageMic, "Record" => PageRecord, "Settings" => PageSettings, "AutoClicker" => PageAutoClicker, "Gallery" => PageGallery, _ => PageEq });
             if (tab == "Eq") Dispatcher.BeginInvoke(new Action(DrawCurve), DispatcherPriority.Loaded);
             UpdateMeters();
         }
@@ -930,9 +941,13 @@ namespace GraphiteCompanion
             winG.Pressed += () => Dispatcher.BeginInvoke(new Action(ToggleOverlay));
             winG.EscapePressed = () =>
             {
+                if (regionSelection != null) { Dispatcher.BeginInvoke(new Action(() => regionSelection?.Cancel())); return true; }
+                if (IsAutoClickerKeyRecording) return false;
+                if (AutoClickerState.Running) { StopAutoClicker(); return true; }
                 var current = overlay;
                 if (current is not { IsVisible: true }) return false;
-                Dispatcher.BeginInvoke(new Action(() => { if (current.IsVisible) current.Close(); }));
+                if (current.HasOpenDialog) return false;
+                Dispatcher.BeginInvoke(new Action(() => { if (current.IsVisible) current.DismissFromEscape(); }));
                 return true;
             };
             ApplyHotkeys();
@@ -983,7 +998,13 @@ namespace GraphiteCompanion
             e.Cancel = true;
             if (shutdownStarted) return;
             shutdownStarted = true;
+            galleryPanel?.Dispose();
             countdownTimer?.Dispose();
+            autoClicker?.Dispose();
+            autoClickerUiTimer?.Stop();
+            regionSelection?.Cancel();
+            clickerIndicator?.Close();
+            DetachPushToTalk();
             reallyExit = true;
             Hide();
             tray.Dispose();

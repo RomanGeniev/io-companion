@@ -196,7 +196,9 @@ namespace GraphiteCompanion
 
         public void ToggleOverlay()
         {
+            if (regionSelection != null) return;
             if (shutdownStarted) return;
+            if (overlay?.ActivateOwnedDialog() == true) return;
             if (overlay is { IsVisible: true }) { overlay.Close(); return; }
             overlay = new OverlayWindow(this);
             overlay.Closed += (_, _) => { overlay = null; ScheduleTrim(); if (MixerPopup.IsOpen) RefreshMixer(); };

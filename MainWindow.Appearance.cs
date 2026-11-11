@@ -100,7 +100,7 @@ namespace GraphiteCompanion
             if (shutdownStarted) return;
             // switching the Fluent theme re-creates control templates, which resets scroll positions;
             // remember them so the window stays where the user was
-            var scrollers = new[] { SidebarScroll, EffectsScroll, PageMic, PageRecord, PresetScroll, PageSettings };
+            var scrollers = new[] { SidebarScroll, EffectsScroll, PageMic, PageRecord, PresetScroll, PageSettings, PageAutoClicker };
             var offsets = Array.ConvertAll(scrollers, s => s.VerticalOffset);
             void RestoreScroll()
             {

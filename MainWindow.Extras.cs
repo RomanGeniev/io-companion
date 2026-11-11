@@ -165,6 +165,7 @@ namespace GraphiteCompanion
             try
             {
                 bool muted = !micSession.GetMute();
+                if (settings.PushToTalk) SetPushToTalkEnabled(false);
                 micSession.SetMute(muted);
                 UpdateMicMuteUi(muted);
                 SyncTrayMic(muted);

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Input;
@@ -18,6 +18,9 @@ namespace GraphiteCompanion
         public Action Run { get; init; } = () => { };
         /// <summary>The combination in force right now (null = nothing free was found).</summary>
         public (uint mods, uint key)? Current { get; set; }
+        public Action? Released { get; init; }
+        public Func<bool>? RequireHeld { get; init; }
+        public Func<bool>? Enabled { get; init; }
         public bool IsCustom { get; set; }
     }
 
@@ -63,6 +66,12 @@ namespace GraphiteCompanion
                         Defaults = new[] { (CA, 0x27u), (CSA, 0x27u), (CA, 0x22u) }, Run = () => _ = MediaCommand(MediaService.Next, playPause: false) },
                 new() { Id = "media.prev", Group = "Музыка", Label = "Предыдущий трек",
                         Defaults = new[] { (CA, 0x25u), (CSA, 0x25u), (CA, 0x21u) }, Run = () => _ = MediaCommand(MediaService.Previous, playPause: false) },
+                new() { Id = "autoclicker", Group = "Автокликер", Label = "Запустить / остановить автокликер",
+                        Defaults = new[] { (0u, 0x75u) }, Run = AutoClickerKeyDown, Released = AutoClickerKeyUp, RequireHeld = () => AutoClickerOptions.HoldToRun },
+                new() { Id = "ptt", Group = "Звук", Label = "Говорить, пока удерживается клавиша",
+                    Defaults = new[] { (0u, 0x77u) }, Run = () => SetPushToTalkHeld(true), Released = () => SetPushToTalkHeld(false), Enabled = () => settings.PushToTalk },
+                new() { Id = "shot.region", Group = "Запись экрана", Label = "Снимок области в файл и буфер обмена",
+                    Defaults = new[] { (CA, 0x53u) }, Run = () => _ = TakeRegionScreenshot() },
             };
         }
 
@@ -107,6 +116,7 @@ namespace GraphiteCompanion
             hotkeys.Clear();
             Resolve(register: true);
             UpdateHotkeyTexts();
+            RefreshPushToTalk();
         }
 
         /// <summary>
@@ -118,7 +128,7 @@ namespace GraphiteCompanion
             var taken = new HashSet<(uint, uint)>();
             bool Take((uint mods, uint key) c, HotkeyDef d)
             {
-                if (register) return hotkeys.Register(c.mods, c.key, d.Run);
+                if (register && (d.Enabled?.Invoke() ?? true)) return hotkeys.Register(c.mods, c.key, d.Run, d.Released, d.RequireHeld);
                 if (taken.Contains(c) || !hotkeys.IsFree(c.mods, c.key)) return false;
                 taken.Add(c);
                 return true;
@@ -157,22 +167,44 @@ namespace GraphiteCompanion
             string over = L("overlay");
             if (winG?.Active == true) over = "Win + G  (или " + over + ")";
             SetOverlayHotkeyLabel(over);
+            AutoClickerChanged?.Invoke();
         }
 
         // ---------------- settings window ----------------
 
-        public void OpenHotkeysWindow()
+        private HotkeysWindow? hotkeysEditor;
+        public void OpenHotkeysWindow(System.Windows.Window? owner = null)
         {
-            ShowFromTray();
+            if (hotkeysEditor is { IsVisible: true }) { hotkeysEditor.Activate(); return; }
+            StopAutoClicker();
+            if (clickerKeyRecorder != null) EndAutoClickerKeyRecording(clickerKeyRecorder);
+            if (owner == null) ShowFromTray();
             hotkeys.Clear();          // otherwise a pressed combination would trigger its action instead of being recorded
             Resolve(register: false);
-            try { new HotkeysWindow(this).ShowDialog(); }
-            finally { ApplyHotkeys(); }
+            try
+            {
+                var editor = new HotkeysWindow(this, owner);
+                hotkeysEditor = editor;
+                editor.Closed += (_, _) =>
+                {
+                    hotkeysEditor = null;
+                    if (!shutdownStarted) { ApplyHotkeys(); overlay?.Refresh(); }
+                };
+                editor.Show();
+                editor.Activate();
+            }
+            catch
+            {
+                hotkeysEditor = null;
+                if (!shutdownStarted) ApplyHotkeys();
+                throw;
+            }
         }
 
         /// <summary>Assigns a new combination. Returns an error text for the user, or null on success.</summary>
         public string? TrySetHotkey(HotkeyDef def, uint mods, uint key)
         {
+            if ((mods & HotkeyService.Win) != 0 && key == 0x47 && winG?.Active == true) return "Win + G используется оверлеем. Выберите другую клавишу.";
             bool fKey = key >= 0x70 && key <= 0x87;
             if (mods == 0 && !fKey) return "Добавьте Ctrl, Alt или Shift — иначе клавиша перестанет работать в обычном вводе.";
             var other = HotkeyDefs.FirstOrDefault(d => d != def && d.Current is { } c && c.mods == mods && c.key == key);

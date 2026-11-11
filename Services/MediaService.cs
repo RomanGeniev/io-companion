@@ -40,20 +40,46 @@ namespace GraphiteCompanion.Services
         private static MediaManager? manager;
         private static string? coverKey;
         private static ImageSource? cover;
+        private static MediaSession? observedSession;
+        private static long mediaRevision;
+        private static readonly object requestGate = new();
+        private static Task<NowPlaying?>? snapshotRequest;
+        private static string? coverLoadingKey;
+        private static DateTime retryCoverAfter;
+        private static NowPlaying? latest;
+        public static DateTime LatestAt { get; private set; }
+        public static NowPlaying? Recent => DateTime.UtcNow - LatestAt < TimeSpan.FromSeconds(3) ? latest : null;
+
+        private static void MediaChanged(MediaSession sender, MediaPropertiesChangedEventArgs args) => Interlocked.Increment(ref mediaRevision);
+        private static MediaSession? Observe(MediaSession? session)
+        {
+            if (!ReferenceEquals(session, observedSession))
+            {
+                if (observedSession != null) try { observedSession.MediaPropertiesChanged -= MediaChanged; } catch { }
+                observedSession = session;
+                if (session != null) session.MediaPropertiesChanged += MediaChanged;
+                Interlocked.Increment(ref mediaRevision);
+            }
+            return session;
+        }
 
         private static async Task<MediaSession?> Session()
         {
             try
             {
-                manager ??= await MediaManager.RequestAsync();
+                manager ??= await MediaManager.RequestAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2));
                 // Windows' "current" session can be a paused tab while music plays elsewhere: prefer what is playing
                 var current = manager.GetCurrentSession();
-                if (IsPlaying(current)) return current;
+                if (IsPlaying(current)) return Observe(current);
+                MediaSession? fallback = current;
                 foreach (var s in manager.GetSessions())
-                    if (IsPlaying(s)) return s;
-                return current;
+                {
+                    fallback ??= s;
+                    if (IsPlaying(s)) return Observe(s);
+                }
+                return Observe(fallback);
             }
-            catch { return null; }
+            catch { manager = null; return null; }
         }
 
         private static bool IsPlaying(MediaSession? s)
@@ -62,23 +88,45 @@ namespace GraphiteCompanion.Services
             catch { return false; }
         }
 
-        public static async Task<NowPlaying?> GetAsync()
+        public static Task<NowPlaying?> GetAsync()
+        {
+            lock (requestGate)
+            {
+                if (snapshotRequest == null || snapshotRequest.IsCompleted) snapshotRequest = ReadSnapshot();
+                return snapshotRequest;
+            }
+        }
+
+        private static async Task<NowPlaying?> ReadSnapshot()
         {
             var s = await Session();
             if (s == null) return null;
             try
             {
-                var props = await s.TryGetMediaPropertiesAsync();
-                var info = s.GetPlaybackInfo();
-                var tl = s.GetTimelineProperties();
-                bool playing = info.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
-
-                var duration = tl.EndTime - tl.StartTime;
-                var position = tl.Position - tl.StartTime;
-                // apps update the position only now and then: add the time passed since the last update
-                var since = DateTimeOffset.Now - tl.LastUpdatedTime;
-                if (playing && since > TimeSpan.Zero && since < TimeSpan.FromHours(6))
-                    position += TimeSpan.FromTicks((long)(since.Ticks * (info.PlaybackRate ?? 1.0)));
+                var props = await s.TryGetMediaPropertiesAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+                bool playing = false, canPrevious = true, canNext = true, canSeek = false;
+                double rate = 1;
+                try
+                {
+                    var info = s.GetPlaybackInfo();
+                    playing = info.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+                    canPrevious = info.Controls.IsPreviousEnabled;
+                    canNext = info.Controls.IsNextEnabled;
+                    canSeek = info.Controls.IsPlaybackPositionEnabled;
+                    rate = info.PlaybackRate ?? 1;
+                }
+                catch { /* Optional controls must not hide valid track metadata. */ }
+                TimeSpan duration = TimeSpan.Zero, position = TimeSpan.Zero;
+                try
+                {
+                    var tl = s.GetTimelineProperties();
+                    duration = tl.EndTime - tl.StartTime;
+                    position = tl.Position - tl.StartTime;
+                    var since = DateTimeOffset.Now - tl.LastUpdatedTime;
+                    if (playing && since > TimeSpan.Zero && since < TimeSpan.FromHours(6))
+                        position += TimeSpan.FromTicks((long)(since.Ticks * rate));
+                }
+                catch { /* Some browsers expose metadata before publishing a timeline. */ }
                 if (duration < TimeSpan.Zero) duration = TimeSpan.Zero;
                 if (position < TimeSpan.Zero) position = TimeSpan.Zero;
                 if (duration > TimeSpan.Zero && position > duration) position = duration;
@@ -91,26 +139,40 @@ namespace GraphiteCompanion.Services
                     Position = position,
                     Duration = duration,
                     Playing = playing,
-                    CanPrevious = info.Controls.IsPreviousEnabled,
-                    CanNext = info.Controls.IsNextEnabled,
-                    CanSeek = info.Controls.IsPlaybackPositionEnabled && duration > TimeSpan.Zero,
+                    CanPrevious = canPrevious,
+                    CanNext = canNext,
+                    CanSeek = canSeek && duration > TimeSpan.Zero,
                 };
-                if (np.Key != coverKey)
-                {
-                    coverKey = np.Key;
-                    cover = await LoadCover(props?.Thumbnail);
-                }
-                else if (cover == null && props?.Thumbnail != null)
-                {
-                    cover = await LoadCover(props.Thumbnail); // some apps attach the picture a moment after the title
-                }
-                return new NowPlaying
+                if (string.IsNullOrWhiteSpace(np.Title) && string.IsNullOrWhiteSpace(np.Artist)) return null;
+                string imageKey = s.SourceAppUserModelId + "\n" + np.Key + "\n" + Interlocked.Read(ref mediaRevision);
+                EnsureCover(imageKey, props?.Thumbnail);
+                latest = new NowPlaying
                 {
                     Title = np.Title, Artist = np.Artist, App = np.App, Position = np.Position, Duration = np.Duration,
                     Playing = np.Playing, CanPrevious = np.CanPrevious, CanNext = np.CanNext, CanSeek = np.CanSeek, Cover = cover,
                 };
+                LatestAt = DateTime.UtcNow;
+                return latest;
             }
-            catch { return null; }
+            catch { manager = null; return null; }
+        }
+
+        private static void EnsureCover(string key, Windows.Storage.Streams.IRandomAccessStreamReference? thumbnail)
+        {
+            if (key != coverKey) { coverKey = key; cover = null; retryCoverAfter = DateTime.MinValue; }
+            if (thumbnail == null || cover != null || coverLoadingKey == key || DateTime.UtcNow < retryCoverAfter) return;
+            coverLoadingKey = key;
+            _ = RefreshCover(key, thumbnail);
+        }
+
+        private static async Task RefreshCover(string key, Windows.Storage.Streams.IRandomAccessStreamReference thumbnail)
+        {
+            try
+            {
+                var loaded = await LoadCover(thumbnail);
+                if (coverKey == key) { cover = loaded; retryCoverAfter = DateTime.UtcNow.AddSeconds(2); }
+            }
+            finally { if (coverLoadingKey == key) coverLoadingKey = null; }
         }
 
         private static async Task<ImageSource?> LoadCover(Windows.Storage.Streams.IRandomAccessStreamReference? thumb)
@@ -118,14 +180,20 @@ namespace GraphiteCompanion.Services
             if (thumb == null) return null;
             try
             {
-                using var ras = await thumb.OpenReadAsync();
+                using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                using var ras = await thumb.OpenReadAsync().AsTask(cancel.Token);
                 using var src = ras.AsStreamForRead();
-                if (src.Length == 0) return null;
+                // Browser artwork streams may not expose Length/Seek reliably. Decode a
+                // complete memory copy, rather than attaching the live WinRT stream to WPF.
+                using var bytes = new MemoryStream();
+                await src.CopyToAsync(bytes, cancel.Token);
+                if (bytes.Length == 0) return null;
+                bytes.Position = 0;
                 var bmp = new BitmapImage();
                 bmp.BeginInit();
                 bmp.CacheOption = BitmapCacheOption.OnLoad;
                 bmp.DecodePixelWidth = 300;
-                bmp.StreamSource = src;
+                bmp.StreamSource = bytes;
                 bmp.EndInit();
                 bmp.Freeze();
                 return bmp;

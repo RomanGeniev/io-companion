@@ -19,6 +19,7 @@ namespace GraphiteCompanion.Controls
     public sealed class NowPlayingCard : Border, IDisposable
     {
         private readonly MainWindow main;
+        private readonly Func<System.Threading.Tasks.Task<NowPlaying?>> readSnapshot;
         private readonly Canvas backdropLayer = new()
         {
             IsHitTestVisible = false, Opacity = 0, CacheMode = new BitmapCache { RenderAtScale = 0.5 },
@@ -41,6 +42,9 @@ namespace GraphiteCompanion.Controls
         private NowPlaying? state;
         private DateTime stateTime;
         private string? shownKey;
+        private ImageSource? shownCover;
+        private bool firstRead = true;
+        private int emptyReads;
         private bool busy, dragging, scrubbing, settingValue;
         private DateTime ignoreUntil;     // after a seek / skip the app needs a moment before it reports the new position
         private int tick;
@@ -75,9 +79,10 @@ namespace GraphiteCompanion.Controls
             seek.Value = seek.Minimum + fraction * (seek.Maximum - seek.Minimum);
         }
 
-        public NowPlayingCard(MainWindow main)
+        public NowPlayingCard(MainWindow main, Func<System.Threading.Tasks.Task<NowPlaying?>>? readSnapshot = null)
         {
             this.main = main;
+            this.readSnapshot = readSnapshot ?? MediaService.GetAsync;
             CornerRadius = new CornerRadius(16);
             BorderThickness = new Thickness(1);
             SetResourceReference(BackgroundProperty, "InsetBrush");
@@ -238,6 +243,8 @@ namespace GraphiteCompanion.Controls
             timer.Tick += async (_, _) => await Tick();
             Loaded += async (_, _) => { timer.Start(); await Fetch(); };
             Unloaded += (_, _) => { timer.Stop(); seekRequest?.Cancel(); };
+            state = MediaService.Recent;
+            stateTime = state == null ? DateTime.Now : MediaService.LatestAt.ToLocalTime();
             Show();
         }
 
@@ -289,8 +296,11 @@ namespace GraphiteCompanion.Controls
             busy = true;
             try
             {
-                var s = await MediaService.GetAsync();
+                var s = await readSnapshot();
                 if (disposed || panelMoving) return;
+                if (s == null && ++emptyReads < 3) return;
+                if (s != null) emptyReads = 0;
+                firstRead = false;
                 if ((dragging || seekRequest != null || DateTime.Now < ignoreUntil) && s != null && state != null && s.Key == state.Key) return;
                 if (s?.Key != state?.Key) seekRequest?.Cancel();
                 if (s == null || state == null || s.Key != state.Key) seekFails = 0;   // new track / app: give seeking a fresh chance
@@ -326,8 +336,8 @@ namespace GraphiteCompanion.Controls
             var s = state;
             bool has = s != null && (s.Title.Length > 0 || s.Artist.Length > 0);
             appText.Text = has ? ("СЕЙЧАС ИГРАЕТ · " + s!.App.ToUpperInvariant()).TrimEnd(' ', '·') : "МУЗЫКА";
-            titleText.Text = has ? (s!.Title.Length > 0 ? s.Title : "Без названия") : "Сейчас ничего не играет";
-            artistText.Text = has ? s!.Artist : "Включите музыку или видео — трек, обложка и управление появятся здесь";
+            titleText.Text = has ? (s!.Title.Length > 0 ? s.Title : "Без названия") : firstRead ? "Загружаем трек…" : "Нет данных о треке";
+            artistText.Text = has ? s!.Artist : firstRead ? "Получаем данные плеера" : "Плеер не передал сведения в Windows. Медиакнопки остаются доступны.";
             artistText.Visibility = artistText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             playGlyph.Text = s?.Playing == true ? "" : "";
             prev.IsEnabled = s == null || s.CanPrevious;     // without a session the media keys are sent
@@ -335,9 +345,10 @@ namespace GraphiteCompanion.Controls
             RefreshHints();
 
             string key = has ? s!.Key + (s.Cover != null ? "+c" : "") : "";
-            if (key != shownKey)
+            if (key != shownKey || !ReferenceEquals(shownCover, s?.Cover))
             {
                 shownKey = key;
+                shownCover = s?.Cover;
                 coverImage.Source = s?.Cover;
                 coverGlyph.Visibility = s?.Cover == null ? Visibility.Visible : Visibility.Collapsed;
                 backdrop.Source = s?.Cover;

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -78,6 +78,8 @@ namespace GraphiteCompanion.Services
         public string Theme { get; set; } = "Dark";
         public string Accent { get; set; } = "Violet";
         public string CustomAccent { get; set; } = "#22D3EE";
+        public bool PushToTalk { get; set; }
+        public AutoClickerSettings? AutoClicker { get; set; } = new();
         public bool CheckUpdates { get; set; } = true;
         public string? SkippedVersion { get; set; }
 

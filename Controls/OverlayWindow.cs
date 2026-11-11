@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -29,7 +30,7 @@ namespace GraphiteCompanion.Controls
         private readonly Button outputButton = new();
         private readonly Popup outputPopup = new() { StaysOpen = true, AllowsTransparency = true, Placement = PlacementMode.Bottom, PopupAnimation = PopupAnimation.Fade };
         private readonly StackPanel outputItems = new();
-        private readonly Button replayButton = new(), recordButton = new(), shotButton = new();
+        private readonly Button replayButton = new(), recordButton = new(), shotButton = new(), regionButton = new();
         private readonly TextBlock title = new() { FontSize = 22, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
         private readonly TextBlock subtitle = new() { FontSize = 12 };
         private readonly RadioButton[] modes = new RadioButton[3];
@@ -37,13 +38,34 @@ namespace GraphiteCompanion.Controls
         private readonly Slider volume = new();
         private readonly TextBlock volumeText = new() { Width = 44, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.SemiBold };
         private readonly ToggleButton mute = new();
-        private readonly Button micButton = new();
+        private readonly ToggleButton micButton = new();
+        private readonly System.Windows.Shapes.Path micSlash = new()
+        {
+            Data = Geometry.Parse("M 2,2 L 16,16"), StrokeThickness = 1.7,
+            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+            Visibility = Visibility.Collapsed,
+        };
         private readonly Button compare = new();
         private readonly TextBlock footer = new() { FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 16, 0, 0) };
         private readonly Border dragArea;
         private readonly NowPlayingCard nowPlaying;
         private readonly OverlayTimerCard timerCard;
         private readonly Button timerButton = new();
+        private readonly Button clickerButton = new();
+        private readonly Popup clickerPopup = new() { StaysOpen = true, AllowsTransparency = true, Placement = PlacementMode.Bottom, PopupAnimation = PopupAnimation.Fade };
+        private AutoClickerPanel? clickerPanel;
+        private bool? clickerHighlighted;
+        private readonly DispatcherTimer clickerLeaveTimer = new(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(230) };
+        private bool clickerLeaveArmed;
+        private readonly VoiceQuickCard voiceCard;
+        internal bool HasOpenDialog => OwnedWindows.Cast<Window>().Any(w => w.IsVisible);
+        internal bool ActivateOwnedDialog()
+        {
+            var dialog = OwnedWindows.Cast<Window>().FirstOrDefault(w => w.IsVisible);
+            if (dialog == null) return false;
+            dialog.Activate();
+            return true;
+        }
         private IntPtr hwnd;
         private System.Drawing.Rectangle screenBounds;
         private int fullscreenState;
@@ -64,8 +86,12 @@ namespace GraphiteCompanion.Controls
 
         private static T R<T>(string key) => (T)Application.Current.FindResource(key);
 
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+        [DllImport("user32.dll", EntryPoint = "SetWindowPos")]
+        private static extern bool NativeSetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+        [DllImport("user32.dll")]
+        private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
+        [DllImport("user32.dll")]
+        private static extern bool GetPhysicalCursorPos(out DrawingPoint point);
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern int GetWindowLong(IntPtr hWnd, int index);
         [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -74,8 +100,42 @@ namespace GraphiteCompanion.Controls
         private static extern uint GetDpiForWindow(IntPtr hWnd);
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
         private struct NativeRect { public int Left, Top, Right, Bottom; }
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern bool GetWindowRect(IntPtr hWnd, out NativeRect rect);
+        [DllImport("user32.dll", EntryPoint = "GetWindowRect")]
+        private static extern bool NativeGetWindowRect(IntPtr hWnd, out NativeRect rect);
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MonitorInfo { public int Size; public NativeRect Monitor, Work; public uint Flags; }
+        [DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromPoint(DrawingPoint point, uint flags);
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
+
+        // Low-level mouse hooks report physical pixels. Keep every native drag and
+        // hit-test operation in that coordinate space, even across mixed-DPI screens.
+        private static bool GetWindowRect(IntPtr window, out NativeRect rect)
+        {
+            IntPtr previous = SetThreadDpiAwarenessContext(new IntPtr(-4));
+            try { return NativeGetWindowRect(window, out rect); }
+            finally { if (previous != IntPtr.Zero) SetThreadDpiAwarenessContext(previous); }
+        }
+        private static bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags)
+        {
+            IntPtr previous = SetThreadDpiAwarenessContext(new IntPtr(-4));
+            try { return NativeSetWindowPos(window, after, x, y, width, height, flags); }
+            finally { if (previous != IntPtr.Zero) SetThreadDpiAwarenessContext(previous); }
+        }
+        private static DrawingPoint Pointer() => GetPhysicalCursorPos(out var point) ? point : Forms.Cursor.Position;
+        private static System.Drawing.Rectangle PointerScreen()
+        {
+            IntPtr previous = SetThreadDpiAwarenessContext(new IntPtr(-4));
+            try
+            {
+                var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+                if (GetMonitorInfo(MonitorFromPoint(Pointer(), 2), ref info))
+                    return System.Drawing.Rectangle.FromLTRB(info.Monitor.Left, info.Monitor.Top, info.Monitor.Right, info.Monitor.Bottom);
+                return Forms.Screen.FromPoint(Pointer()).Bounds;
+            }
+            finally { if (previous != IntPtr.Zero) SetThreadDpiAwarenessContext(previous); }
+        }
         [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hWnd, int attribute, ref int value, int size);
         [System.Runtime.InteropServices.DllImport("shell32.dll")]
@@ -86,6 +146,8 @@ namespace GraphiteCompanion.Controls
         private static extern IntPtr WindowFromPhysicalPoint(DrawingPoint point);
         [DllImport("user32.dll")]
         private static extern IntPtr GetAncestor(IntPtr window, uint flags);
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
         private delegate IntPtr MouseHookProc(int code, IntPtr message, IntPtr data);
         [DllImport("user32.dll", SetLastError = true)]
         private static extern IntPtr SetWindowsHookExW(int id, MouseHookProc proc, IntPtr module, uint thread);
@@ -99,6 +161,11 @@ namespace GraphiteCompanion.Controls
         public OverlayWindow(MainWindow main)
         {
             this.main = main;
+            clickerLeaveTimer.Tick += (_, _) =>
+            {
+                clickerLeaveTimer.Stop();
+                if (CanDismissForClicker() && clickerLeaveArmed && !PointerInsidePanels(Pointer())) Close();
+            };
             HelpTips.Set(eqSwitch, "Включает или отключает эквалайзер выбранного устройства. Настройки полос сохраняются; остальные эффекты управляются отдельно.");
             HelpTips.Set(volume, "Общая громкость выбранного устройства вывода. Изменение применяется сразу и также отражается в Windows.");
             HelpTips.Set(compare, "Удерживайте, чтобы временно услышать звук без эквалайзера и эффектов. Отпустите, чтобы вернуть обработку.");
@@ -149,12 +216,35 @@ namespace GraphiteCompanion.Controls
             var keys = new Button { ToolTip = "Изменить горячие клавиши", Content = Glyph("", 15),
                 Padding = new Thickness(12, 8, 12, 8), Cursor = Cursors.Hand };
             keys.SetResourceReference(StyleProperty, "GhostButton");
-            keys.Click += (_, _) => { Close(); main.OpenHotkeysWindow(); };
+            keys.Click += (_, _) => main.OpenHotkeysWindow(this);
             timerButton.Content = Glyph("\uE916", 15);
             timerButton.Margin = new Thickness(0, 0, 4, 0);
             System.Windows.Automation.AutomationProperties.SetName(timerButton, "Показать или скрыть таймер");
             HelpTips.Set(timerButton, "Показать или скрыть таймер. Скрытие не останавливает отсчёт; выбор сохраняется при закрытии оверлея.");
             timerButton.Click += (_, _) => main.CountdownTimer.ToggleVisibility();
+            clickerButton.Content = Glyph("\uE962", 15);
+            clickerButton.Padding = new Thickness(10, 8, 10, 8);
+            clickerButton.Margin = new Thickness(0, 0, 4, 0);
+            AutomationPropertiesForClicker();
+            clickerPopup.PlacementTarget = clickerButton;
+            clickerPopup.VerticalOffset = 8;
+            clickerButton.Click += (_, _) =>
+            {
+                if (clickerPanel == null)
+                {
+                    clickerPanel = new AutoClickerPanel(main, compact: true);
+                    clickerPanel.SettingsRequested += Close;
+                    var box = new Border { Child = clickerPanel, Padding = new Thickness(18), CornerRadius = new CornerRadius(14), BorderThickness = new Thickness(1) };
+                    box.SetResourceReference(Border.BackgroundProperty, "CardBrush");
+                    box.SetResourceReference(Border.BorderBrushProperty, "CardBorderBrush");
+                    clickerPopup.Child = box;
+                }
+                clickerPopup.IsOpen = !clickerPopup.IsOpen;
+                RefreshClickerButton();
+            };
+            clickerPopup.Closed += (_, _) => RefreshClickerButton();
+            main.AutoClickerChanged += RefreshClickerButton;
+            RefreshClickerButton();
             var close = new Button { ToolTip = "Закрыть (Esc)", Content = Glyph("", 15), Padding = new Thickness(12, 8, 12, 8),
                 Margin = new Thickness(8, 0, 0, 0), Cursor = Cursors.Hand };
             close.SetResourceReference(StyleProperty, "GhostButton");
@@ -162,6 +252,7 @@ namespace GraphiteCompanion.Controls
             var headerButtons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             headerButtons.Children.Add(openApp);
             headerButtons.Children.Add(timerButton);
+            headerButtons.Children.Add(clickerButton);
             headerButtons.Children.Add(keys);
             headerButtons.Children.Add(close);
             var header = new Grid();
@@ -177,25 +268,27 @@ namespace GraphiteCompanion.Controls
             };
             dragArea.PreviewMouseLeftButtonDown += (_, e) =>
             {
-                if (openApp.IsMouseOver || timerButton.IsMouseOver || keys.IsMouseOver || close.IsMouseOver) return;
-                e.Handled = StartDragging(Forms.Cursor.Position);
+                // Keep the entire toolbar out of the drag surface, including future buttons.
+                if (headerButtons.IsMouseOver) return;
+                e.Handled = StartDragging(Pointer());
             };
             dragArea.PreviewMouseLeftButtonUp += (_, e) =>
             {
                 if (dragOffset == null) return;
-                QueueDragMove(Forms.Cursor.Position, released: true);
+                QueueDragMove(Pointer(), released: true);
                 e.Handled = true;
             };
             dragArea.PreviewMouseMove += (_, e) =>
             {
                 if (dragOffset == null) return;
-                QueueDragMove(Forms.Cursor.Position);
+                // The hook is authoritative; WPF may deliver an older move after it.
+                if (mouseHook == IntPtr.Zero) QueueDragMove(Pointer());
                 e.Handled = true;
             };
             dragArea.LostMouseCapture += (_, _) =>
             {
-                if (dragOffset != null) MoveToPointer(endingDrag ? pendingDragPointer : Forms.Cursor.Position);
                 StopDragging();
+                clickerLeaveTimer.Stop();
             };
 
             // ================= left column: sound
@@ -239,6 +332,7 @@ namespace GraphiteCompanion.Controls
             volRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             volRow.ColumnDefinitions.Add(new ColumnDefinition());
             volRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            volRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             mute.SetResourceReference(StyleProperty, "IconToggle");
             mute.ToolTip = "Выключить / включить звук";
             mute.Content = new TextBlock { FontFamily = R<FontFamily>("IconFont"), FontSize = 15 };
@@ -257,11 +351,21 @@ namespace GraphiteCompanion.Controls
             Grid.SetColumn(volumeText, 2);
             volRow.Children.Add(volumeText);
 
-            micButton.SetResourceReference(StyleProperty, "GhostButton");
-            micButton.Margin = new Thickness(0, 10, 0, 0);
-            micButton.Padding = new Thickness(12, 6, 12, 6);
-            micButton.HorizontalAlignment = HorizontalAlignment.Left;
+            micButton.SetResourceReference(StyleProperty, "IconToggle");
+            micButton.Margin = new Thickness(12, 0, 0, 0);
+            micButton.VerticalAlignment = VerticalAlignment.Center;
+            var micIcon = new Grid { Width = 18, Height = 18, IsHitTestVisible = false };
+            var micGlyph = Glyph("\uE720", 16);
+            micGlyph.HorizontalAlignment = HorizontalAlignment.Center;
+            micIcon.Children.Add(micGlyph);
+            micSlash.SetBinding(System.Windows.Shapes.Shape.StrokeProperty,
+                new System.Windows.Data.Binding("Foreground") { Source = micButton });
+            micIcon.Children.Add(micSlash);
+            micButton.Content = micIcon;
+            System.Windows.Automation.AutomationProperties.SetName(micButton, "Отключить микрофон");
             micButton.Click += (_, _) => { main.ToggleMicMute(fromHotkey: false); Refresh(); };
+            Grid.SetColumn(micButton, 3);
+            volRow.Children.Add(micButton);
 
             customTitle.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
             customBox.Child = customPanel;
@@ -274,7 +378,12 @@ namespace GraphiteCompanion.Controls
             left.Children.Add(eqRow);
             left.Children.Add(Section("ГРОМКОСТЬ"));
             left.Children.Add(volRow);
-            left.Children.Add(micButton);
+            voiceCard = new VoiceQuickCard(value =>
+            {
+                main.SetOverlayVoice(value);
+                RefreshVoice();
+            });
+            left.Children.Add(voiceCard);
             left.Children.Add(Section("КУДА ИДЁТ ЗВУК"));
             outputButton.SetResourceReference(StyleProperty, "GhostButton");
             outputButton.Padding = new Thickness(14, 10, 14, 10);
@@ -293,18 +402,21 @@ namespace GraphiteCompanion.Controls
             outputPopup.PlacementTarget = outputButton;
             left.Children.Add(outputButton);
             left.Children.Add(outputPopup);
+            left.Children.Add(clickerPopup);
 
             // ================= right column: recording + programs
-            var recRow = new UniformGrid { Columns = 3 };
-            foreach (var b in new[] { replayButton, recordButton, shotButton })
+            var recRow = new UniformGrid { Columns = 4 };
+            foreach (var b in new[] { replayButton, recordButton, shotButton, regionButton })
             {
                 b.SetResourceReference(StyleProperty, "GhostButton");
                 b.Padding = new Thickness(6, 10, 6, 10);
-                b.Margin = new Thickness(b == replayButton ? 0 : 3, 0, b == shotButton ? 0 : 3, 0);
+                b.Margin = new Thickness(b == replayButton ? 0 : 3, 0, b == regionButton ? 0 : 3, 0);
                 recRow.Children.Add(b);
             }
             replayButton.Click += async (_, _) => { Close(); await main.SaveReplay(); };
             recordButton.Click += async (_, _) => { Close(); await main.ToggleRecording(); };
+            regionButton.Click += async (_, _) => { Close(); await main.TakeRegionScreenshot(); };
+            HelpTips.Set(regionButton, "Выделить область, сохранить снимок в галерею и скопировать в буфер обмена. Esc — отмена.");
             shotButton.Click += async (_, _) => { Close(); await main.TakeScreenshot(); };
 
             var appsScroll = new ScrollViewer { Content = apps, MaxHeight = 420, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -315,6 +427,9 @@ namespace GraphiteCompanion.Controls
             timerCard = new OverlayTimerCard(main.CountdownTimer);
             main.CountdownTimer.Changed += RefreshTimerVisibility;
             RefreshTimerVisibility();
+            timerCard.Width = double.NaN;
+            timerCard.HorizontalAlignment = HorizontalAlignment.Stretch;
+            right.Children.Add(timerCard);
             right.Children.Add(Section("ГРОМКОСТЬ ПРОГРАММ"));
             right.Children.Add(appsScroll);
 
@@ -330,7 +445,6 @@ namespace GraphiteCompanion.Controls
             footer.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
 
             var body = new StackPanel { Margin = new Thickness(30, 0, 30, 18) };
-            body.Children.Add(timerCard);
             nowPlaying = new NowPlayingCard(main);
             body.Children.Add(nowPlaying);
             body.Children.Add(columns);
@@ -353,12 +467,14 @@ namespace GraphiteCompanion.Controls
             PreviewKeyDown += (_, e) =>
             {
                 if (e.Key != Key.Escape) return;
+                if (HasOpenDialog || main.IsAutoClickerKeyRecording) return;
                 e.Handled = true;
-                Close();
+                DismissFromEscape();
             };
             // The global keyboard hook handles Escape while the game keeps keyboard focus.
             Closed += (_, _) =>
             {
+                clickerLeaveTimer.Stop();
                 StopDragging();
                 nowPlaying.Dispose();
                 timerCard.Dispose();
@@ -367,8 +483,55 @@ namespace GraphiteCompanion.Controls
                 mouseHook = IntPtr.Zero;
                 mouseHookProc = null;
                 outputPopup.IsOpen = false;
+                clickerPopup.IsOpen = false;
+                main.AutoClickerChanged -= RefreshClickerButton;
                 main.CompareOff();
             };
+        }
+
+        private void RefreshVoice() => voiceCard.Update(main.GetOverlayVoice());
+
+        private void AutomationPropertiesForClicker()
+        {
+            System.Windows.Automation.AutomationProperties.SetName(clickerButton, "Настройки автокликера");
+            HelpTips.Set(clickerButton, "Открыть или скрыть быстрые настройки автокликера. В панели можно изменить клавишу запуска и остановки.");
+        }
+        private void RefreshClickerButton()
+        {
+            bool running = main.AutoClickerState.Running;
+            bool highlighted = running || clickerPopup.IsOpen;
+            if (clickerHighlighted != highlighted)
+            {
+                clickerHighlighted = highlighted;
+                clickerButton.SetResourceReference(StyleProperty, highlighted ? "AccentButton" : "GhostButton");
+            }
+            System.Windows.Automation.AutomationProperties.SetItemStatus(clickerButton, running ? "Автокликер работает" : "Автокликер остановлен");
+            if (!CanDismissForClicker()) { clickerLeaveTimer.Stop(); clickerLeaveArmed = false; return; }
+            if (PointerInsidePanels(Pointer())) { clickerLeaveArmed = true; clickerLeaveTimer.Stop(); }
+            else if (clickerLeaveArmed && !clickerLeaveTimer.IsEnabled) clickerLeaveTimer.Start();
+        }
+        private bool CanDismissForClicker() => IsVisible && main.AutoClickerState.Running && dragOffset == null && !HasOpenDialog && !main.IsAutoClickerKeyRecording;
+        private bool PointerInsidePanels(DrawingPoint pointer)
+        {
+            bool Inside(IntPtr window) => window != IntPtr.Zero && GetWindowRect(window, out var bounds) &&
+                pointer.X >= bounds.Left && pointer.X < bounds.Right && pointer.Y >= bounds.Top && pointer.Y < bounds.Bottom;
+            if (Inside(hwnd)) return true;
+            if (outputPopup.IsOpen && PresentationSource.FromVisual(outputItems) is HwndSource output && Inside(output.Handle)) return true;
+            if (clickerPopup.IsOpen && clickerPanel != null)
+            {
+                if (PresentationSource.FromVisual(clickerPanel) is HwndSource popup && Inside(popup.Handle)) return true;
+                // ComboBox dropdowns are separate HWNDs; crossing into them is not leaving the panel.
+                IntPtr hit = GetAncestor(WindowFromPhysicalPoint(pointer), 2);
+                GetWindowThreadProcessId(hit, out uint process);
+                if (process == Environment.ProcessId && hit != new WindowInteropHelper(main).Handle) return true;
+            }
+            return false;
+        }
+        internal void DismissFromEscape()
+        {
+            if (main.AutoClickerState.Running) { main.StopAutoClicker(); return; }
+            if (clickerPopup.IsOpen) { clickerPopup.IsOpen = false; return; }
+            Close();
         }
 
         private void RefreshTimerVisibility()
@@ -411,8 +574,7 @@ namespace GraphiteCompanion.Controls
         {
             SHQueryUserNotificationState(out fullscreenState);
             Refresh();
-            var screen = System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Cursor.Position);
-            screenBounds = screen.Bounds;
+            screenBounds = PointerScreen();
             WindowStartupLocation = WindowStartupLocation.Manual;
             // Create the HWND on the target monitor before measuring the panel at that monitor's DPI.
             new WindowInteropHelper(this).EnsureHandle();
@@ -485,6 +647,8 @@ namespace GraphiteCompanion.Controls
 
         private IntPtr OnMouseHook(int code, IntPtr message, IntPtr data)
         {
+            // Synthetic clicks must not dismiss or drag the settings overlay.
+            if (code == 0 && (Marshal.ReadInt32(data, 12) & 1) != 0) return CallNextHookEx(mouseHook, code, message, data);
             if (code == 0)
             {
                 // Read screen pixels directly so drag speed is independent of monitor DPI.
@@ -500,12 +664,19 @@ namespace GraphiteCompanion.Controls
 
         private void OnDesktopPress(DrawingPoint pointer)
         {
-            if (!IsVisible || dragOffset != null) return;
+            if (!IsVisible || dragOffset != null || HasOpenDialog) return;
+            if (GetWindowRect(hwnd, out var bounds) &&
+                pointer.X >= bounds.Left && pointer.X < bounds.Right && pointer.Y >= bounds.Top && pointer.Y < bounds.Bottom) return;
             IntPtr hit = GetAncestor(WindowFromPhysicalPoint(pointer), 2 /* GA_ROOT */);
             if (hit == hwnd) return;
             if (outputPopup.IsOpen && PresentationSource.FromVisual(outputItems) is HwndSource popup && hit == popup.Handle) return;
+            if (clickerPopup.IsOpen)
+            {
+                GetWindowThreadProcessId(hit, out uint process);
+                if (process == Environment.ProcessId) return; // includes ComboBox dropdown windows
+            }
             // Close after returning from the hook so the input queue is never blocked by teardown.
-            Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => { if (IsVisible && dragOffset == null) Close(); }));
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => { if (IsVisible && dragOffset == null && !HasOpenDialog) Close(); }));
         }
 
         private void LogPresentation(string stage)
@@ -572,14 +743,17 @@ namespace GraphiteCompanion.Controls
             mute.IsChecked = s.Muted;
             ((TextBlock)mute.Content).Text = s.Muted ? "" : "";
             micButton.Visibility = s.HasMic ? Visibility.Visible : Visibility.Collapsed;
-            micButton.Content = Labeled(s.MicMuted ? "" : "", s.MicMuted ? "Микрофон выключен" : "Микрофон включён", null, vertical: false);
+            micButton.IsChecked = s.MicMuted;
+            micSlash.Visibility = s.MicMuted ? Visibility.Visible : Visibility.Collapsed;
+            System.Windows.Automation.AutomationProperties.SetItemStatus(micButton, s.MicMuted ? "Микрофон выключен" : "Микрофон включён");
             micButton.ToolTip = (s.MicMuted ? "Нажмите, чтобы включить микрофон" : "Нажмите, чтобы выключить микрофон") + " · " + main.HotkeyLabel("mic");
-            micButton.SetResourceReference(ForegroundProperty, s.MicMuted ? "MutedFgBrush" : "TextBrush");
+            voiceCard.Update(main.GetOverlayVoice());
 
             replayButton.Content = Labeled("", main.ReplayActive ? "Повтор" : "Повтор выкл.", main.HotkeyLabel("replay"), vertical: true);
             replayButton.IsEnabled = main.ReplayActive;
             recordButton.Content = Labeled(main.RecordingActive ? "" : "", main.RecordingActive ? "Остановить" : "Запись", main.HotkeyLabel("record"), vertical: true);
-            shotButton.Content = Labeled("", "Скриншот", main.HotkeyLabel("shot"), vertical: true);
+            regionButton.Content = Labeled("\uE7A7", "Область", main.HotkeyLabel("shot.region"), vertical: true);
+            shotButton.Content = Labeled("", "Снимок", main.HotkeyLabel("shot"), vertical: true);
             footer.Text = $"Esc, {main.OverlayKeyText()} или клик снаружи — закрыть";
             RefreshCustom();
             loading = false;

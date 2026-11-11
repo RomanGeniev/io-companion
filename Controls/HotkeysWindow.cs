@@ -16,10 +16,12 @@ namespace GraphiteCompanion.Controls
         private readonly TextBlock message = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0), MinHeight = 18 };
         private HotkeyDef? recording;
 
-        public HotkeysWindow(MainWindow main)
+        public HotkeysWindow(MainWindow main, Window? owner = null)
         {
             this.main = main;
-            Owner = main;
+            Owner = owner ?? main;
+            Topmost = Owner.Topmost;
+            ShowInTaskbar = false;
             Title = "Горячие клавиши";
             Width = 600;
             Height = 700;
@@ -144,7 +146,11 @@ namespace GraphiteCompanion.Controls
 
         private void OnKey(object sender, KeyEventArgs e)
         {
-            if (recording == null) return;
+            if (recording == null)
+            {
+                if (e.Key == Key.Escape) { e.Handled = true; Close(); }
+                return;
+            }
             e.Handled = true;
             var key = e.Key == Key.System ? e.SystemKey : e.Key;
             if (key == Key.Escape) { Fill(null); return; }
