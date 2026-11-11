@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -142,14 +142,15 @@ namespace GraphiteCompanion.Services
     public static class Autostart
     {
         private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        private const string ValueName = "GraphiteCompanion";
+        private const string ValueName = "SoundShot";
+        private const string LegacyValueName = "GraphiteCompanion";
 
         public static bool IsEnabled
         {
             get
             {
                 using var key = Registry.CurrentUser.OpenSubKey(RunKey);
-                return key?.GetValue(ValueName) is string;
+                return key?.GetValue(ValueName) is string || key?.GetValue(LegacyValueName) is string;
             }
         }
 
@@ -160,6 +161,8 @@ namespace GraphiteCompanion.Services
                 key.SetValue(ValueName, $"\"{Environment.ProcessPath}\" --tray");
             else
                 key.DeleteValue(ValueName, false);
+            // Keep existing preferences while migrating the old startup name.
+            key.DeleteValue(LegacyValueName, false);
         }
     }
 }

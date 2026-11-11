@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -281,9 +281,15 @@ namespace GraphiteCompanion
                 var store = (mic ? micSession : session)?.Effects;
                 if (store == null) continue;
                 try { store.Write(format, pid, value); }
-                catch (Exception ex) { SettingsStore.LogError(ex); }
+                catch (Exception ex)
+                {
+                    SettingsStore.LogError(ex);
+                    BannerText.Text = "Не удалось применить эффект: " + ex.Message;
+                    Banner.Visibility = Visibility.Visible;
+                }
             }
             pendingEffects.Clear();
+            ReloadEffects();
         }
 
         /// <summary>Re-reads effect settings from the driver (they can also be changed in Audio Center).</summary>
@@ -490,11 +496,11 @@ namespace GraphiteCompanion
             OutputStrip.Visibility = tab is "Eq" or "Effects" ? Visibility.Visible : Visibility.Collapsed;
             (PageTitle.Text, PageDescription.Text) = tab switch
             {
-                "Mic" => ("Ваш голос", "Выберите микрофон, проверьте уровень и послушайте результат."),
-                "Record" => ("Сохраните момент", "Повтор — то, что уже произошло. Запись — то, что начнётся сейчас."),
-                "Effects" => ("Характер звучания", "Включайте нужные эффекты и сравнивайте результат на слух."),
-                "Settings" => ("Устройте всё по-своему", "Оформление, запуск приложения и уведомления."),
-                _ => ("Ваш звук", "Выберите настроение. Подстройте детали под себя."),
+                "Mic" => ("Микрофон", "Выберите микрофон, проверьте уровень и послушайте результат."),
+                "Record" => ("Запись экрана", "Видео, мгновенные повторы и скриншоты."),
+                "Effects" => ("Эффекты", "Включайте нужные эффекты и сравнивайте результат на слух."),
+                "Settings" => ("Настройки", "Оформление, запуск приложения и уведомления."),
+                _ => ("Звук", "Выберите настроение. Подстройте детали под себя."),
             };
             if (tab == "Mic")
             {
@@ -935,8 +941,11 @@ namespace GraphiteCompanion
         private string hotkeyLine = "";
         private WinGHook? winG;
 
-        private void SetOverlayHotkeyLabel(string over) =>
-            HotkeysText.Text = $"Горячие клавиши работают везде:  {over} — панель поверх окон  ·  {hotkeyLine}";
+        private void SetOverlayHotkeyLabel(string over)
+        {
+            HotkeysText.Text = $"Оверлей: {over}";
+            Controls.HelpTips.Set(HotkeysSettingsButton, $"Горячие клавиши работают из любой программы. {hotkeyLine}");
+        }
 
         public void ShowFromTray()
         {
@@ -974,6 +983,7 @@ namespace GraphiteCompanion
             e.Cancel = true;
             if (shutdownStarted) return;
             shutdownStarted = true;
+            countdownTimer?.Dispose();
             reallyExit = true;
             Hide();
             tray.Dispose();
@@ -1066,8 +1076,7 @@ namespace GraphiteCompanion
         private void DeleteCustom_Click(object sender, RoutedEventArgs e)
         {
             if (CustomList.SelectedItem is not string name) return;
-            if (MessageBox.Show($"Удалить пресет «{name}»?", "SoundShot",
-                                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            if (new Controls.ConfirmPresetWindow(this, name).ShowDialog() != true) return;
             settings.Custom.RemoveAll(c => c.Name == name);
             if (settings.ActiveCustom == name) settings.ActiveCustom = null;
             RefreshCustomList();

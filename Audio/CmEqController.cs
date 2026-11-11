@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using GraphiteCompanion.Models;
@@ -31,14 +31,14 @@ namespace GraphiteCompanion.Audio
             this.defaults = defaults;
         }
 
-        internal static IAudioSystemEffectsPropertyStore? ActivateFx(IMMDevice device)
+        internal static IAudioSystemEffectsPropertyStore? ActivateFx(IMMDevice device, Guid? context = null)
         {
             var iid = typeof(IAudioSystemEffectsPropertyStore).GUID;
             IntPtr guidPtr = Marshal.AllocCoTaskMem(16);
             IntPtr pv = Marshal.AllocCoTaskMem(24);
             try
             {
-                Marshal.StructureToPtr(StoreContext, guidPtr, false);
+                Marshal.StructureToPtr(context ?? StoreContext, guidPtr, false);
                 for (int i = 0; i < 24; i++) Marshal.WriteByte(pv, i, 0);
                 Marshal.WriteInt16(pv, 0, (short)Native.VtClsid);
                 Marshal.WriteIntPtr(pv, 8, guidPtr);

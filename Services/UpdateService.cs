@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -72,6 +72,11 @@ namespace GraphiteCompanion.Services
             return new UpdateInfo(version, notes, asset.url, asset.name);
         }
 
+        internal static string FindUpdateExecutable(string directory) =>
+            Directory.GetFiles(directory, "SoundShot.exe", SearchOption.AllDirectories).FirstOrDefault()
+            ?? Directory.GetFiles(directory, "GraphiteCompanion.exe", SearchOption.AllDirectories).FirstOrDefault()
+            ?? throw new InvalidOperationException("В архиве обновления нет SoundShot.exe");
+
         /// <summary>Downloads the update and launches the replace-and-restart script. The caller must exit the app afterwards.</summary>
         public static async Task InstallAsync(UpdateInfo info, IProgress<double>? progress = null)
         {
@@ -103,8 +108,7 @@ namespace GraphiteCompanion.Services
             {
                 string extract = Path.Combine(dir, "x");
                 ZipFile.ExtractToDirectory(download, extract);
-                newExe = Directory.GetFiles(extract, "GraphiteCompanion.exe", SearchOption.AllDirectories).FirstOrDefault()
-                         ?? throw new InvalidOperationException("В архиве обновления нет GraphiteCompanion.exe");
+                newExe = FindUpdateExecutable(extract);
             }
 
             string target = Environment.ProcessPath ?? throw new InvalidOperationException("Не найден путь программы");

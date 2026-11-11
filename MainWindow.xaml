@@ -191,10 +191,10 @@
                 <TextBlock Text="Микрофон" Margin="10,0,0,0" />
               </StackPanel>
             </RadioButton>
-            <RadioButton x:Name="TabRecord" GroupName="Tab" Style="{StaticResource SidebarNav}" Tag="Record" Checked="Tab_Checked" ToolTip="Запись">
+            <RadioButton x:Name="TabRecord" GroupName="Tab" Style="{StaticResource SidebarNav}" Tag="Record" Checked="Tab_Checked" ToolTip="Запись экрана">
               <StackPanel Orientation="Horizontal">
                 <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" FontSize="16" Width="24" />
-                <TextBlock Text="Запись" Margin="10,0,0,0" />
+                <TextBlock Text="Запись экрана" Margin="10,0,0,0" />
               </StackPanel>
             </RadioButton>
             <TextBlock Text="ИНСТРУМЕНТЫ" Foreground="{DynamicResource SubTextBrush}" FontSize="10" FontWeight="SemiBold" Margin="14,18,0,8" />
@@ -620,36 +620,17 @@
       </Grid>
       <ScrollViewer x:Name="PageMic" Grid.Row="2" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel>
-          <Border Style="{StaticResource CompactCard}" Padding="20,18">
-            <StackPanel>
-              <Grid>
-                <StackPanel>
-                  <TextBlock Text="Микрофон" FontSize="19" FontWeight="SemiBold" />
-                  <ComboBox x:Name="MicDeviceCombo" Margin="0,12,0,0" HorizontalAlignment="Stretch" AutomationProperties.Name="Микрофон для настройки" DisplayMemberPath="Label" ToolTip="Выберите микрофон, который хотите настраивать и слушать здесь. Это не меняет выбор микрофона внутри Discord, игры или другого приложения — там проверьте его отдельно." SelectionChanged="MicDeviceCombo_SelectionChanged" />
-                  <TextBlock x:Name="MicName" Margin="0,8,0,0" Foreground="{DynamicResource SubTextBrush}" Text="Поиск микрофона…" TextWrapping="Wrap" />
-                </StackPanel>
-              </Grid>
-              <Grid Margin="0,18,0,0">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="Auto" />
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <ToggleButton x:Name="MicMuteButton" Style="{StaticResource IconToggle}" Click="MicMute_Click" ToolTip="Выключить микрофон" IsEnabled="False">
-                  <TextBlock x:Name="MicMuteIcon" Text="" FontFamily="{StaticResource IconFont}" FontSize="15" />
-                </ToggleButton>
-                <Slider x:Name="MicVolumeSlider" Grid.Column="1" Style="{StaticResource VolumeSlider}" Margin="12,0" AutomationProperties.Name="Громкость входа в Windows" ToolTip="Громкость входа выбранного микрофона в Windows. Говорите обычным голосом и смотрите на индикатор уровня. Если он часто достигает красной зоны, уменьшите значение." VerticalAlignment="Center" ValueChanged="MicVolume_ValueChanged" IsEnabled="False" />
-                <TextBlock x:Name="MicVolumeText" Grid.Column="2" Text="—" Width="44" TextAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold" />
-              </Grid>
-              <TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Text="Громкость входа в Windows. Скажите несколько слов и проверьте, чтобы уровень на громких слогах оставался ниже 0 дБ." />
-              <Grid Margin="0,16,0,0">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="Auto" />
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Уровень" FontSize="12" Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center" Width="46" />
-                <Border x:Name="MicMeterTrack" Grid.Column="1" Height="10" CornerRadius="5" Background="{DynamicResource TrackBrush}" Margin="0,0,12,0">
+          <Border Style="{StaticResource CompactCard}" Padding="18,10" Margin="0,0,0,12">
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock Text="Устройство" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <ComboBox x:Name="MicDeviceCombo" AutomationProperties.Name="Микрофон для настройки" DisplayMemberPath="Label" ToolTip="Выберите микрофон, который хотите настраивать и слушать здесь. Это не меняет выбор микрофона внутри Discord, игры или другого приложения — там проверьте его отдельно." SelectionChanged="MicDeviceCombo_SelectionChanged" HorizontalAlignment="Stretch" />
+                <TextBlock x:Name="MicName" Foreground="{DynamicResource SubTextBrush}" Text="Поиск микрофона…" TextWrapping="Wrap" Margin="0,6,0,0" FontSize="11" />
+                <Grid Margin="0,8,0,0">
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="64"/></Grid.ColumnDefinitions>
+                  <TextBlock Text="Уровень" FontSize="12" Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                  <Border x:Name="MicMeterTrack" Height="10" CornerRadius="5" Background="{DynamicResource TrackBrush}" Grid.Column="1" Margin="0,0,10,0" VerticalAlignment="Center">
                   <Border x:Name="MicMeterFill" HorizontalAlignment="Left" Width="0" CornerRadius="5">
                     <Border.Background>
                       <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
@@ -661,97 +642,73 @@
                     </Border.Background>
                   </Border>
                 </Border>
-                <TextBlock x:Name="MicMeterText" Grid.Column="2" Width="64" TextAlignment="Right" FontSize="12" Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center" Text="—" />
-              </Grid>
-            </StackPanel>
-          </Border>
-          <UniformGrid x:Name="MicEffectsGrid" Columns="2" Margin="-6,0" VerticalAlignment="Top" />
-          <!-- RNNoise via Equalizer APO: noise suppression for any microphone -->
-          <Border x:Name="NrCard" Style="{StaticResource CompactCard}" Margin="0,6,0,0" Padding="18,16">
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-              </Grid.ColumnDefinitions>
-              <Border Width="38" Height="38" CornerRadius="10" Background="{DynamicResource InsetBrush}" VerticalAlignment="Top">
-                <TextBlock Text="" FontFamily="{StaticResource IconFont}" FontSize="17" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-              </Border>
-              <StackPanel Grid.Column="1" Margin="12,0">
-                <TextBlock Text="Шумоподавление для любого микрофона" FontSize="15" FontWeight="SemiBold" />
-                <TextBlock x:Name="NrText" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                  <TextBlock x:Name="MicMeterText" TextAlignment="Right" FontSize="12" Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center" Text="—" Grid.Column="2" />
+                </Grid>
               </StackPanel>
-              <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                <CheckBox x:Name="NrSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" AutomationProperties.Name="Шумоподавление RNNoise" Click="NrSwitch_Click" Visibility="Collapsed" ToolTip="Шумоподавление уменьшает постоянный фоновый шум микрофона. Включите «Слышать себя» в наушниках и сравните речь с обработкой и без неё. При сильном шуме голос тоже может измениться." />
-                <Button x:Name="NrButton" Style="{StaticResource AccentButton}" Click="NrButton_Click" Visibility="Collapsed" ToolTip="Подготовка шумоподавления для выбранного микрофона. Кнопка откроет нужный шаг установки или настройки; пояснение рядом показывает текущий статус.">
-                  <TextBlock x:Name="NrButtonText" />
-                </Button>
+              <StackPanel Grid.Column="2">
+                <TextBlock Text="Громкость микрофона" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <Grid>
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="44"/></Grid.ColumnDefinitions>
+                  <ToggleButton x:Name="MicMuteButton" Style="{StaticResource IconToggle}" Click="MicMute_Click" ToolTip="Выключить микрофон" IsEnabled="False" AutomationProperties.Name="Выключить микрофон">
+                  <TextBlock x:Name="MicMuteIcon" Text="" FontFamily="{StaticResource IconFont}" FontSize="15" />
+                </ToggleButton>
+                  <Slider x:Name="MicVolumeSlider" Style="{StaticResource VolumeSlider}" AutomationProperties.Name="Громкость входа в Windows" ToolTip="Громкость входа выбранного микрофона в Windows. Говорите обычным голосом и смотрите на индикатор уровня. Если он часто достигает красной зоны, уменьшите значение." VerticalAlignment="Center" ValueChanged="MicVolume_ValueChanged" IsEnabled="False" Grid.Column="1" Margin="10,0" />
+                  <TextBlock x:Name="MicVolumeText" Text="—" TextAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold" Grid.Column="2" />
+                </Grid>
+                <CheckBox x:Name="MonitorSwitch" Style="{StaticResource Switch}" VerticalAlignment="Center" AutomationProperties.Name="Слышать себя" Click="MonitorSwitch_Click" IsEnabled="False" ToolTip="Позволяет услышать выбранный микрофон в устройстве вывода и оценить настройки. Используйте наушники, чтобы избежать свиста из колонок. Небольшая задержка прослушивания возможна." Content="Слышать себя" Margin="0,6,0,0" HorizontalAlignment="Stretch" />
               </StackPanel>
             </Grid>
           </Border>
-          <Border Style="{StaticResource CompactCard}" Margin="0,6,0,0" Padding="18,16">
+          <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="0.9*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="1.25*"/></Grid.ColumnDefinitions>
             <StackPanel>
-              <TextBlock Text="Обработка голоса" FontSize="15" FontWeight="SemiBold" />
-              <TextBlock x:Name="MicVoiceStatus" Margin="0,6,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" />
-              <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="12,10" Margin="0,12,0,0">
+              <Border x:Name="NrCard" Style="{StaticResource CompactCard}" Padding="16,10" Margin="0,0,0,6">
                 <StackPanel>
-                  <WrapPanel VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal" Margin="0,0,24,4">
-                      <CheckBox x:Name="MonitorSwitch" Style="{StaticResource Switch}" VerticalAlignment="Center" AutomationProperties.Name="Слышать себя" Click="MonitorSwitch_Click" IsEnabled="False" ToolTip="Позволяет услышать выбранный микрофон в устройстве вывода и оценить настройки. Используйте наушники, чтобы избежать свиста из колонок. Небольшая задержка прослушивания возможна." />
-                      <TextBlock Text="Слышать себя" VerticalAlignment="Center" Margin="8,0,0,0" />
+                  <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel Margin="0,0,8,0">
+                      <TextBlock Text="Шумоподавление" FontSize="15" FontWeight="SemiBold"/>
+                      <TextBlock Text="RNNoise · для любого микрофона" FontSize="11" Foreground="{DynamicResource SubTextBrush}" Margin="0,3,0,0"/>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                      <CheckBox x:Name="MicVoiceSwitch" Style="{StaticResource Switch}" VerticalAlignment="Center" AutomationProperties.Name="Коррекция голоса" Click="MicVoiceSwitch_Click" IsEnabled="False" ToolTip="Включает обработку тембра и усиления микрофона. Регуляторы сохраняются при выключении. Для сравнения включите «Слышать себя» и повторите одну фразу с коррекцией и без неё." />
-                      <TextBlock Text="Коррекция" VerticalAlignment="Center" Margin="8,0,0,0" />
-                    </StackPanel>
-                  </WrapPanel>
-                  <TextBlock FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0" Text="Наденьте наушники, включите «Слышать себя» и повторите одну фразу с включённой и выключенной коррекцией. Значения регуляторов сохраняются." />
+                    <CheckBox x:Name="NrSwitch" Style="{StaticResource Switch}" AutomationProperties.Name="Шумоподавление RNNoise" Click="NrSwitch_Click" Visibility="Collapsed" ToolTip="Шумоподавление уменьшает постоянный фоновый шум микрофона. Включите «Слышать себя» в наушниках и сравните речь с обработкой и без неё. При сильном шуме голос тоже может измениться." Grid.Column="1" VerticalAlignment="Center" />
+                  </Grid>
+                  <TextBlock x:Name="NrText" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                  <Button x:Name="NrButton" Style="{StaticResource AccentButton}" Click="NrButton_Click" Visibility="Collapsed" ToolTip="Подготовка шумоподавления для выбранного микрофона. Кнопка откроет нужный шаг установки или настройки; пояснение рядом показывает текущий статус." Margin="0,6,0,0" HorizontalAlignment="Left" Padding="12,7">
+                  <TextBlock x:Name="NrButtonText" />
+                </Button>
                 </StackPanel>
               </Border>
-              <StackPanel x:Name="MicVoiceControls" IsEnabled="False" Margin="0,12,0,0">
-                <UniformGrid Columns="3" Margin="0,0,0,10">
-                  <Button Style="{StaticResource GhostButton}" Margin="0,0,4,0" Content="Чёткая речь" Tag="Speech" ToolTip="Подчёркивает согласные и убирает низкий гул." Click="MicVoicePreset_Click" />
-                  <Button Style="{StaticResource GhostButton}" Margin="4,0" Content="Мягкий голос" Tag="Soft" ToolTip="Смягчает резкие высокие и оставляет согласные слышимыми." Click="MicVoicePreset_Click" />
-                  <Button Style="{StaticResource GhostButton}" Margin="4,0,0,0" Content="Сбросить" Tag="Reset" ToolTip="Возвращает регуляторы к исходным значениям." Click="MicVoicePreset_Click" />
-                </UniformGrid>
-                <Grid TextElement.FontSize="13">
-                  <Grid.Resources>
-                    <Style x:Key="MicVoiceHint" TargetType="TextBlock">
-                      <Setter Property="FontSize" Value="12" />
-                      <Setter Property="Foreground" Value="{DynamicResource SubTextBrush}" />
-                      <Setter Property="TextWrapping" Value="Wrap" />
-                      <Setter Property="Margin" Value="0,0,0,6" />
-                    </Style>
-                  </Grid.Resources>
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="146" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="58" />
-                  </Grid.ColumnDefinitions>
-                  <Grid.RowDefinitions>
-                    <RowDefinition Height="31" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="31" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="31" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                  </Grid.RowDefinitions>
-                  <TextBlock Text="Усиление" VerticalAlignment="Center" />
-                  <Slider x:Name="MicVoiceGain" Grid.Column="1" Style="{StaticResource VolumeSlider}" VerticalAlignment="Center" Minimum="-12" Maximum="12" TickFrequency="1" IsSnapToTickEnabled="True" SmallChange="1" LargeChange="3" AutomationProperties.Name="Усиление микрофона в децибелах" ValueChanged="MicVoice_Changed" ToolTip="Дополнительное усиление в обработке микрофона, в децибелах. Плюс делает голос громче, минус тише. Слишком большое усиление может дать хрип; сравнивайте обычную речь." />
-                  <TextBlock Grid.Column="2" Text="{Binding ElementName=MicVoiceGain, Path=Value, StringFormat={}{0:+0;-0;0} дБ}" TextAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}" />
-                  <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Style="{StaticResource MicVoiceHint}" Text="Меняет громкость всего сигнала. Если речь тихая, попробуйте +3 дБ. Если голос хрипит на громких словах, уменьшите усиление." />
-                  <TextBlock Grid.Row="2" Text="Разборчивость" VerticalAlignment="Center" />
-                  <Slider x:Name="MicVoiceClarity" Grid.Row="2" Grid.Column="1" Style="{StaticResource VolumeSlider}" VerticalAlignment="Center" Minimum="-6" Maximum="6" TickFrequency="1" IsSnapToTickEnabled="True" SmallChange="1" LargeChange="2" AutomationProperties.Name="Разборчивость голоса" ToolTip="Разборчивость речи: усиливает или ослабляет область около 3 кГц, где слышны согласные. Плюс может сделать речь чётче, но слишком большое значение — резкой." ValueChanged="MicVoice_Changed" />
-                  <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding ElementName=MicVoiceClarity, Path=Value, StringFormat={}{0:+0;-0;0} дБ}" TextAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}" />
-                  <TextBlock Grid.Row="3" Grid.ColumnSpan="3" Style="{StaticResource MicVoiceHint}" Text="Выделяет согласные около 3 кГц. Попробуйте +2 дБ, если окончания слов плохо слышны." />
-                  <TextBlock Grid.Row="4" Text="Высокие частоты" VerticalAlignment="Center" />
-                  <Slider x:Name="MicVoiceTreble" Grid.Row="4" Grid.Column="1" Style="{StaticResource VolumeSlider}" VerticalAlignment="Center" Minimum="-6" Maximum="6" TickFrequency="1" IsSnapToTickEnabled="True" SmallChange="1" LargeChange="2" AutomationProperties.Name="Высокие частоты голоса" ToolTip="Высокие частоты голоса, начиная примерно с 6,5 кГц. Плюс добавляет яркости, минус смягчает шипящие «с» и «ш». Проверяйте на одной и той же фразе." ValueChanged="MicVoice_Changed" />
-                  <TextBlock Grid.Row="4" Grid.Column="2" Text="{Binding ElementName=MicVoiceTreble, Path=Value, StringFormat={}{0:+0;-0;0} дБ}" TextAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}" />
-                  <TextBlock Grid.Row="5" Grid.ColumnSpan="3" Style="{StaticResource MicVoiceHint}" Text="Меняет яркость в верхней части голоса. Попробуйте −2 дБ, если «с» и «ш» звучат резко." />
-                  <TextBlock Grid.Row="6" Text="Срез низких частот" VerticalAlignment="Center" />
-                  <ComboBox x:Name="MicVoiceHighPass" Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,3,0,3" SelectedValuePath="Tag" SelectedIndex="0" AutomationProperties.Name="Срез низких частот" ToolTip="Убирает низкий гул и вибрации стола. Более высокая граница сильнее срезает низкие частоты, но может сделать голос тоньше. Начните с небольшого значения и послушайте результат." SelectionChanged="MicVoice_Changed">
+              <StackPanel x:Name="MicEffectsGrid" Margin="-6,0" VerticalAlignment="Top"/>
+            </StackPanel>
+            <Border Grid.Column="2" Style="{StaticResource CompactCard}" Padding="16,10" Margin="0" VerticalAlignment="Top">
+              <StackPanel>
+                <Grid>
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                  <TextBlock Text="Коррекция голоса" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                  <CheckBox x:Name="MicVoiceSwitch" Style="{StaticResource Switch}" VerticalAlignment="Center" AutomationProperties.Name="Коррекция голоса" Click="MicVoiceSwitch_Click" IsEnabled="False" ToolTip="Включает обработку тембра и усиления микрофона. Регуляторы сохраняются при выключении. Для сравнения включите «Слышать себя» и повторите одну фразу с коррекцией и без неё." Grid.Column="1" Margin="8,0,0,0" />
+                </Grid>
+                <TextBlock x:Name="MicVoiceStatus" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,6,0,0" Visibility="Collapsed" />
+                <StackPanel x:Name="MicVoiceControls" IsEnabled="False" Margin="0,6,0,0">
+                  <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <Button Style="{StaticResource GhostButton}" Padding="8,5" Margin="0,0,4,0" Content="Чёткая речь" Tag="Speech" ToolTip="Подчёркивает согласные и убирает низкий гул." Click="MicVoicePreset_Click"/>
+                    <Button Grid.Column="1" Style="{StaticResource GhostButton}" Padding="8,5" Margin="4,0" Content="Мягкий голос" Tag="Soft" ToolTip="Смягчает резкие высокие и оставляет согласные слышимыми." Click="MicVoicePreset_Click"/>
+                    <Button Grid.Column="2" Style="{StaticResource GhostButton}" Padding="8,5" Margin="4,0,0,0" Content="Сбросить" Tag="Reset" ToolTip="Выключает коррекцию и возвращает все её регуляторы к исходным значениям." Click="MicVoicePreset_Click"/>
+                  </Grid>
+                  <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="*"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="34"/></Grid.RowDefinitions>
+                    <TextBlock Text="Усиление" VerticalAlignment="Center"/>
+                    <Slider x:Name="MicVoiceGain" Style="{StaticResource VolumeSlider}" VerticalAlignment="Center" Minimum="-12" Maximum="12" TickFrequency="1" IsSnapToTickEnabled="True" SmallChange="1" LargeChange="3" AutomationProperties.Name="Усиление микрофона в децибелах" ValueChanged="MicVoice_Changed" ToolTip="Дополнительное усиление в обработке микрофона, в децибелах. Плюс делает голос громче, минус тише. Слишком большое усиление может дать хрип; сравнивайте обычную речь." Grid.Column="1" />
+                    <TextBlock Grid.Column="2" Text="{Binding ElementName=MicVoiceGain, Path=Value, StringFormat={}{0:+0;-0;0} дБ}" TextAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}"/>
+                    <TextBlock Grid.Row="1" Text="Разборчивость" VerticalAlignment="Center"/>
+                    <Slider x:Name="MicVoiceClarity" Style="{StaticResource VolumeSlider}" VerticalAlignment="Center" Minimum="-6" Maximum="6" TickFrequency="1" IsSnapToTickEnabled="True" SmallChange="1" LargeChange="2" AutomationProperties.Name="Разборчивость голоса" ToolTip="Разборчивость речи: усиливает или ослабляет область около 3 кГц, где слышны согласные. Плюс может сделать речь чётче, но слишком большое значение — резкой." ValueChanged="MicVoice_Changed" Grid.Column="1" Grid.Row="1" />
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding ElementName=MicVoiceClarity, Path=Value, StringFormat={}{0:+0;-0;0} дБ}" TextAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}"/>
+                    <TextBlock Grid.Row="2" Text="Высокие частоты" VerticalAlignment="Center"/>
+                    <Slider x:Name="MicVoiceTreble" Style="{StaticResource VolumeSlider}" VerticalAlignment="Center" Minimum="-6" Maximum="6" TickFrequency="1" IsSnapToTickEnabled="True" SmallChange="1" LargeChange="2" AutomationProperties.Name="Высокие частоты голоса" ToolTip="Высокие частоты голоса, начиная примерно с 6,5 кГц. Плюс добавляет яркости, минус смягчает шипящие «с» и «ш». Проверяйте на одной и той же фразе." ValueChanged="MicVoice_Changed" Grid.Column="1" Grid.Row="2" />
+                    <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding ElementName=MicVoiceTreble, Path=Value, StringFormat={}{0:+0;-0;0} дБ}" TextAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}"/>
+                    <TextBlock Grid.Row="3" Text="Срез низких" VerticalAlignment="Center" ToolTip="Убирает низкий гул и вибрации стола. Начните с 80 Гц; высокая граница может сделать голос тоньше."/>
+                    <ComboBox x:Name="MicVoiceHighPass" SelectedValuePath="Tag" SelectedIndex="0" AutomationProperties.Name="Срез низких частот" ToolTip="Убирает низкий гул и вибрации стола. Более высокая граница сильнее срезает низкие частоты, но может сделать голос тоньше. Начните с небольшого значения и послушайте результат." SelectionChanged="MicVoice_Changed" Grid.Column="1" Grid.Row="3" Grid.ColumnSpan="2" Margin="0,3,0,0">
                     <ComboBoxItem Content="Выключен" Tag="0" />
                     <ComboBoxItem Content="60 Гц" Tag="60" />
                     <ComboBoxItem Content="80 Гц" Tag="80" />
@@ -760,16 +717,13 @@
                     <ComboBoxItem Content="160 Гц" Tag="160" />
                     <ComboBoxItem Content="200 Гц" Tag="200" />
                   </ComboBox>
-                  <TextBlock Grid.Row="7" Grid.ColumnSpan="3" Style="{StaticResource MicVoiceHint}" Margin="0,3,0,0" Text="Ослабляет гул и вибрации. Начните с 80 Гц. Чем выше значение, тем меньше баса останется в голосе." />
-                </Grid>
-              </StackPanel>
-              <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="12,10" Margin="0,12,0,0">
-                <StackPanel>
-                  <DockPanel Margin="0,0,0,6">
-                    <TextBlock x:Name="MicVoicePlotReadout" DockPanel.Dock="Right" FontSize="12" Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center" />
-                    <TextBlock Text="Изменение по частотам" FontSize="13" FontWeight="SemiBold" />
-                  </DockPanel>
-                  <Canvas x:Name="MicVoicePlot" Height="122" Background="Transparent" ClipToBounds="True" AutomationProperties.Name="Расчётное изменение громкости по частотам" SizeChanged="MicVoicePlot_SizeChanged" MouseMove="MicVoicePlot_MouseMove" MouseLeave="MicVoicePlot_MouseLeave">
+                  </Grid>
+                </StackPanel>
+                <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="10,8" Margin="0,8,0,0">
+                  <StackPanel>
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="Частотная коррекция" FontSize="12" FontWeight="SemiBold" ToolTip="Расчёт по регуляторам, а не измерение микрофона. Выше 0 дБ — усиление, ниже — ослабление. Наведите курсор на график, чтобы увидеть частоту и изменение в дБ."/><TextBlock x:Name="MicVoicePlotReadout" FontSize="10" Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center" Height="16" Margin="8,0,0,0" Grid.Column="1" TextAlignment="Right" /></Grid>
+                    <Canvas x:Name="MicVoicePlot" Height="92" Background="Transparent" ClipToBounds="True" AutomationProperties.Name="Расчётное изменение громкости по частотам" SizeChanged="MicVoicePlot_SizeChanged" MouseMove="MicVoicePlot_MouseMove" MouseLeave="MicVoicePlot_MouseLeave" Margin="0,4,0,0">
                     <Canvas x:Name="MicVoicePlotLabels" IsHitTestVisible="False" />
                     <Path x:Name="MicVoicePlotGrid" Stroke="{DynamicResource CardBorderBrush}" IsHitTestVisible="False" />
                     <Path x:Name="MicVoicePlotZero" Stroke="{DynamicResource SubTextBrush}" StrokeDashArray="4 4" Opacity="0.55" IsHitTestVisible="False" />
@@ -777,12 +731,13 @@
                     <Path x:Name="MicVoicePlotCurve" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeLineJoin="Round" IsHitTestVisible="False" />
                     <Line x:Name="MicVoicePlotCursor" Stroke="{DynamicResource SubTextBrush}" Opacity="0.65" Visibility="Collapsed" IsHitTestVisible="False" />
                   </Canvas>
-                  <TextBlock FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0" Text="Расчёт по регуляторам. Выше 0 дБ — усиление, ниже — ослабление. Наведите курсор, чтобы увидеть частоту и изменение в дБ." />
-                </StackPanel>
-              </Border>
-            </StackPanel>
-          </Border>
-          <TextBlock Margin="4,4,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" x:Name="MicHotkeyText" />
+
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+            </Border>
+          </Grid>
+
         </StackPanel>
       </ScrollViewer>
       <Popup x:Name="MixerPopup" PlacementTarget="{Binding ElementName=MixerOpenButton}" Placement="Bottom" VerticalOffset="8" StaysOpen="False" AllowsTransparency="True" Opened="MixerPopup_Opened">
@@ -812,63 +767,13 @@
       </Popup>
       <ScrollViewer x:Name="PageRecord" Grid.Row="2" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel>
-          <!-- status + actions -->
-          <Border Style="{StaticResource CompactCard}" Padding="20,18">
-            <StackPanel>
-              <Grid>
-                <StackPanel Margin="0,0,80,0">
-                  <TextBlock Text="Повторы и запись экрана" FontSize="19" FontWeight="SemiBold" />
-                  <TextBlock x:Name="RecStatus" Margin="0,3,0,0" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" />
-                </StackPanel>
-                <CheckBox x:Name="ReplaySwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Top" Click="ReplaySwitch_Click" ToolTip="Непрерывно накапливает последние минуты выбранных мониторов во временном буфере на диске. После интересного момента нажмите «Сохранить повтор». После включения буферу нужно время, чтобы заполниться." />
-              </Grid>
-              <Grid Margin="0,16,0,0">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="10" />
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="10" />
-                  <ColumnDefinition Width="Auto" />
-                  <ColumnDefinition Width="10" />
-                  <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Button x:Name="SaveReplayButton" Style="{StaticResource AccentButton}" Click="SaveReplay_Click" ToolTip="Сохраняет уже накопленный фрагмент до нажатия кнопки. Если прошло меньше выбранной длительности, ролик будет короче. Для записи будущих событий используйте «Начать запись».">
-                  <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
-                    <TextBlock x:Name="SaveReplayText" Text="Сохранить повтор" Margin="8,0,0,0" />
-                  </StackPanel>
-                </Button>
-                <Button x:Name="RecordButton" Grid.Column="2" Style="{StaticResource GhostButton}" Click="Record_Click" ToolTip="Первое нажатие начинает запись с текущего момента. Следующее останавливает её и сохраняет ролик. Это отдельная запись, не сохранение прошлого из буфера.">
-                  <StackPanel Orientation="Horizontal">
-                    <Ellipse x:Name="RecordDot" Width="10" Height="10" Fill="#FF4860" VerticalAlignment="Center" />
-                    <TextBlock x:Name="RecordText" Text="Начать запись" Margin="8,0,0,0" />
-                  </StackPanel>
-                </Button>
-                <Button Grid.Column="4" Style="{StaticResource GhostButton}" Click="Screenshot_Click" ToolTip="Сохраняет один кадр выбранного монитора как изображение PNG в папку записей. Звук в снимок не входит.">
-                  <TextBlock Text="" FontFamily="{StaticResource IconFont}" />
-                </Button>
-                <Button Grid.Column="6" Style="{StaticResource GhostButton}" Click="OpenRecFolder_Click" ToolTip="Открывает папку с сохранёнными роликами и снимками в Проводнике. Файлы сгруппированы по монитору и программе.">
-                  <TextBlock Text="" FontFamily="{StaticResource IconFont}" />
-                </Button>
-              </Grid>
-              <TextBlock x:Name="RecHotkeys" Margin="2,12,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" />
-            </StackPanel>
-          </Border>
-          <!-- settings -->
-          <Border Style="{StaticResource CompactCard}" Padding="20,18">
-            <StackPanel>
-              <Grid>
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="16" />
-                  <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <StackPanel>
-                  <StackPanel x:Name="DurationTitle" Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource CardTitle}" Text="ДЛИТЕЛЬНОСТЬ ПОВТОРА" />
-                  </StackPanel>
-                  <ComboBox x:Name="DurationCombo" DisplayMemberPath="Label" ToolTip="Сколько последних секунд или минут хранить для повтора. Это максимальная длина отката, а не ограничение обычной записи. Большая длительность требует больше места для буфера." />
-                  <Grid x:Name="CustomDurationPanel" Visibility="Collapsed" Margin="0,8,0,0">
+          <Grid Margin="0,0,0,10">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Border Style="{StaticResource CompactCard}" Padding="14,10" Margin="0">
+              <StackPanel>
+                <StackPanel x:Name="DurationTitle" Orientation="Horizontal" Margin="0,0,0,6"><TextBlock Text="Длительность всех повторов" FontSize="13" FontWeight="SemiBold"/></StackPanel>
+                <ComboBox x:Name="DurationCombo" DisplayMemberPath="Label" ToolTip="Сколько последних секунд или минут хранить для повтора. Это максимальная длина отката, а не ограничение обычной записи. Большая длительность требует больше места для буфера." />
+                <Grid x:Name="CustomDurationPanel" Visibility="Collapsed" Margin="0,6,0,0">
                     <Grid.ColumnDefinitions>
                       <ColumnDefinition Width="80" />
                       <ColumnDefinition Width="8" />
@@ -883,59 +788,39 @@
                     </ComboBox>
                     <Button Grid.Column="4" Style="{StaticResource AccentButton}" Content="Применить" Click="CustomDuration_Click" ToolTip="Применяет указанное число минут или секунд к буферу повторов. После изменения настройки буфер начинает накапливаться заново." />
                   </Grid>
-                  <TextBlock x:Name="DurationHint" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="2,6,0,0" />
-                </StackPanel>
-                <StackPanel Grid.Column="2">
-                  <StackPanel x:Name="SoundTitle" Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource CardTitle}" Text="ЗВУК В РОЛИКЕ" />
-                  </StackPanel>
-                  <CheckBox x:Name="RecSystemSwitch" Style="{StaticResource Switch}" Content="Звук компьютера" Click="RecSetting_Changed" ToolTip="Добавляет в ролик звук устройства вывода Windows по умолчанию: игру, музыку и другие программы. Если звук идёт через другое устройство, проверьте выбор вывода в Windows." />
-                  <CheckBox x:Name="RecMicSwitch" Style="{StaticResource Switch}" Content="Микрофон" Click="RecSetting_Changed" ToolTip="Добавляет голос с микрофона Windows по умолчанию для связи. Он может отличаться от микрофона, выбранного для настройки на вкладке «Микрофон». Проверьте устройство в Windows перед записью." />
-                </StackPanel>
-              </Grid>
-              <Grid Margin="0,18,0,8">
-                <StackPanel x:Name="MonitorsTitle" Orientation="Horizontal" VerticalAlignment="Center">
-                  <TextBlock Style="{StaticResource CardTitle}" Text="МОНИТОРЫ И КАЧЕСТВО ЗАПИСИ" Margin="0" />
-                </StackPanel>
-                <Button HorizontalAlignment="Right" Style="{StaticResource GhostButton}" Click="IdentifyMonitors_Click" ToolTip="На несколько секунд показывает номер на каждом экране. Сопоставьте его со списком и отметьте мониторы, которые хотите записывать.">
-                  <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
-                    <TextBlock Text="Показать номера" Margin="8,0,0,0" />
-                  </StackPanel>
-                </Button>
-              </Grid>
-              <StackPanel x:Name="MonitorPanel" />
-              <TextBlock x:Name="MonitorHint" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="2,6,0,0" />
-              <TextBlock Style="{StaticResource CardTitle}" Text="ПАПКА ДЛЯ РОЛИКОВ" Margin="0,16,0,8" />
-              <Grid>
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="10" />
-                  <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Border Background="{DynamicResource InsetBrush}" CornerRadius="8" Padding="12,8">
-                  <TextBlock x:Name="RecFolderText" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                </Border>
-                <Button Grid.Column="2" Style="{StaticResource GhostButton}" Content="Выбрать…" Click="ChooseRecFolder_Click" ToolTip="Выбирает, куда сохранять ролики и снимки. Временный буфер повторов хранится отдельно; изменение папки не меняет длительность отката." />
-              </Grid>
-              <TextBlock x:Name="RecInfo" Margin="2,14,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" />
+                <TextBlock x:Name="DurationHint" FontSize="11" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,6,0,0" />
+              </StackPanel>
+            </Border>
+            <Border Grid.Column="2" Style="{StaticResource CompactCard}" Padding="14,10" Margin="0">
+              <StackPanel>
+                <StackPanel x:Name="SoundTitle" Orientation="Horizontal" Margin="0,0,0,6"><TextBlock Text="Звук во всех записях" FontSize="13" FontWeight="SemiBold"/></StackPanel>
+                <CheckBox x:Name="RecSystemSwitch" Style="{StaticResource Switch}" Content="Записывать звук компьютера" Click="RecSetting_Changed" ToolTip="Добавляет в ролик звук устройства вывода Windows по умолчанию: игру, музыку и другие программы. Если звук идёт через другое устройство, проверьте выбор вывода в Windows." FontSize="12" Margin="0,0,0,6" />
+                <CheckBox x:Name="RecMicSwitch" FontSize="12" Style="{StaticResource Switch}" Content="Записывать микрофон" Click="RecSetting_Changed" ToolTip="Добавляет голос с микрофона Windows по умолчанию для связи. Он может отличаться от микрофона, выбранного для настройки на вкладке «Микрофон». Проверьте устройство в Windows перед записью." Margin="0" />
+              </StackPanel>
+            </Border>
+          </Grid>
+          <TextBlock x:Name="RecStatus" Visibility="Collapsed" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource WarnBrush}" Margin="0,0,0,8"/>
+          <TextBlock x:Name="RecInfo" Visibility="Collapsed" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource SubTextBrush}" Margin="0,0,0,8"/>
+          <Grid Margin="0,0,0,8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel x:Name="MonitorsTitle" Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="Ваши мониторы" FontSize="15" FontWeight="SemiBold"/></StackPanel>
+            <Button Grid.Column="1" Content="Показать номера" Style="{StaticResource GhostButton}" Padding="8,4" Click="IdentifyMonitors_Click" ToolTip="На несколько секунд показывает номер на каждом подключённом экране."/>
+          </Grid>
+          <Grid x:Name="MonitorPanel" Margin="0,0,-10,0"/>
+          <Border Style="{StaticResource CompactCard}" Padding="16,8" Margin="0,0,0,0" ToolTip="Ролики и снимки сохраняются отдельно для каждого монитора: «Монитор N», затем папка игры. Название файла содержит дату и тип записи. Защищённое видео может записываться чёрным экраном.">
+          <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <StackPanel Margin="0,0,12,0">
+              <TextBlock Text="Папка сохранения" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,3" />
+              <TextBlock x:Name="RecFolderText" TextTrimming="CharacterEllipsis" FontSize="12" Foreground="{DynamicResource SubTextBrush}" ToolTip="{Binding RelativeSource={RelativeSource Self}, Path=Text}" />
             </StackPanel>
-          </Border>
+            <Button Style="{StaticResource GhostButton}" Click="OpenRecFolder_Click" ToolTip="Открывает папку с сохранёнными роликами и снимками в Проводнике. Файлы сгруппированы по монитору и программе." Grid.Column="1" VerticalAlignment="Center" Padding="10,6" Content="Открыть">
+                  </Button>
+            <Button Style="{StaticResource GhostButton}" Content="Изменить…" Click="ChooseRecFolder_Click" ToolTip="Выбирает, куда сохранять ролики и снимки. Временный буфер повторов хранится отдельно; изменение папки не меняет длительность отката." Grid.Column="2" Margin="6,0,0,0" VerticalAlignment="Center" Padding="10,6" />
+          </Grid>
+        </Border>
+
         </StackPanel>
       </ScrollViewer>
-      <Grid Grid.Row="3" Margin="4,12,0,0">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition />
-          <ColumnDefinition Width="Auto" />
-        </Grid.ColumnDefinitions>
-        <TextBlock x:Name="HotkeysText" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
-        <Button Grid.Column="1" Style="{StaticResource GhostButton}" Margin="12,0,0,0" Click="Hotkeys_Click" ToolTip="Открывает назначение клавиш для оверлея, микрофона, повторов и других действий. Здесь можно посмотреть или изменить сочетания.">
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
-            <TextBlock Text="Горячие клавиши…" Margin="8,0,0,0" />
-          </StackPanel>
-        </Button>
-      </Grid>
       <ScrollViewer x:Name="PageSettings" Grid.Row="2" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <Grid>
           <Grid.ColumnDefinitions>
@@ -986,6 +871,13 @@
                   <TextBlock Text="Убрать Audio Center из автозагрузки" />
                 </Button>
                 <CheckBox x:Name="UpdatesSwitch" Style="{StaticResource Switch}" Content="Проверять обновления" Click="UpdatesSwitch_Click" ToolTip="Разрешает проверку доступности новой версии. Установку обновления вы запускаете отдельной кнопкой." />
+                <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="12" Margin="0,14,0,0">
+                  <StackPanel>
+                    <TextBlock Text="Горячие клавиши" FontSize="14" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="HotkeysText" FontSize="11" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,6,0,8"/>
+                    <Button x:Name="HotkeysSettingsButton" Content="Настроить сочетания…" Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Click="Hotkeys_Click" ToolTip="Назначьте клавиши для записи, повторов, снимков, микрофона, музыки и оверлея."/>
+                  </StackPanel>
+                </Border>
                 <Grid Margin="0,6,0,0">
                   <TextBlock x:Name="VersionText" FontSize="12" Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center" />
                   <Button x:Name="CheckUpdateButton" HorizontalAlignment="Right" Style="{StaticResource GhostButton}" Click="CheckUpdate_Click" Content="Проверить" ToolTip="Проверяет, доступна ли новая версия SoundShot. Само нажатие не устанавливает обновление." />

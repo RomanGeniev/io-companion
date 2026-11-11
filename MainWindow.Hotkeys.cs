@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Input;
@@ -150,11 +150,8 @@ namespace GraphiteCompanion
             HkMusic.Text = L("mode.Music");
             HkMovies.Text = L("mode.Movies");
             EqSwitch.ToolTip = L("eq");
-            MicHotkeyText.Text = $"{L("mic")} — выключить / включить микрофон из любой программы, даже в игре.";
             CompareButton.ToolTip = $"Держите — звук без эквалайзера и эффектов, отпустите — снова ваш. {L("compare")} — переключить";
             replayKey = L("replay"); recordKey = L("record"); shotKey = L("shot");
-            RecHotkeys.Text = $"{replayKey} — сохранить повтор  ·  {recordKey} — начать / остановить запись  ·  {shotKey} — скриншот. " +
-                              "Работают и из игры. Файлы лежат по мониторам: «Монитор N\\Видео\\Игра» и «Монитор N\\Фото\\Игра».";
 
             hotkeyLine = $"{L("pad")} — амбушюры  ·  {L("eq")} — эквалайзер  ·  {L("mic")} — микрофон  ·  {L("compare")} — сравнить";
             string over = L("overlay");

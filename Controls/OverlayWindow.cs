@@ -42,6 +42,8 @@ namespace GraphiteCompanion.Controls
         private readonly TextBlock footer = new() { FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 16, 0, 0) };
         private readonly Border dragArea;
         private readonly NowPlayingCard nowPlaying;
+        private readonly OverlayTimerCard timerCard;
+        private readonly Button timerButton = new();
         private IntPtr hwnd;
         private System.Drawing.Rectangle screenBounds;
         private int fullscreenState;
@@ -148,12 +150,18 @@ namespace GraphiteCompanion.Controls
                 Padding = new Thickness(12, 8, 12, 8), Cursor = Cursors.Hand };
             keys.SetResourceReference(StyleProperty, "GhostButton");
             keys.Click += (_, _) => { Close(); main.OpenHotkeysWindow(); };
+            timerButton.Content = Glyph("\uE916", 15);
+            timerButton.Margin = new Thickness(0, 0, 4, 0);
+            System.Windows.Automation.AutomationProperties.SetName(timerButton, "Показать или скрыть таймер");
+            HelpTips.Set(timerButton, "Показать или скрыть таймер. Скрытие не останавливает отсчёт; выбор сохраняется при закрытии оверлея.");
+            timerButton.Click += (_, _) => main.CountdownTimer.ToggleVisibility();
             var close = new Button { ToolTip = "Закрыть (Esc)", Content = Glyph("", 15), Padding = new Thickness(12, 8, 12, 8),
                 Margin = new Thickness(8, 0, 0, 0), Cursor = Cursors.Hand };
             close.SetResourceReference(StyleProperty, "GhostButton");
             close.Click += (_, _) => Close();
             var headerButtons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             headerButtons.Children.Add(openApp);
+            headerButtons.Children.Add(timerButton);
             headerButtons.Children.Add(keys);
             headerButtons.Children.Add(close);
             var header = new Grid();
@@ -169,7 +177,7 @@ namespace GraphiteCompanion.Controls
             };
             dragArea.PreviewMouseLeftButtonDown += (_, e) =>
             {
-                if (openApp.IsMouseOver || keys.IsMouseOver || close.IsMouseOver) return;
+                if (openApp.IsMouseOver || timerButton.IsMouseOver || keys.IsMouseOver || close.IsMouseOver) return;
                 e.Handled = StartDragging(Forms.Cursor.Position);
             };
             dragArea.PreviewMouseLeftButtonUp += (_, e) =>
@@ -304,6 +312,9 @@ namespace GraphiteCompanion.Controls
             var right = new StackPanel();
             right.Children.Add(Section("ЗАПИСЬ ЭКРАНА", first: true));
             right.Children.Add(recRow);
+            timerCard = new OverlayTimerCard(main.CountdownTimer);
+            main.CountdownTimer.Changed += RefreshTimerVisibility;
+            RefreshTimerVisibility();
             right.Children.Add(Section("ГРОМКОСТЬ ПРОГРАММ"));
             right.Children.Add(appsScroll);
 
@@ -319,6 +330,7 @@ namespace GraphiteCompanion.Controls
             footer.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
 
             var body = new StackPanel { Margin = new Thickness(30, 0, 30, 18) };
+            body.Children.Add(timerCard);
             nowPlaying = new NowPlayingCard(main);
             body.Children.Add(nowPlaying);
             body.Children.Add(columns);
@@ -349,12 +361,22 @@ namespace GraphiteCompanion.Controls
             {
                 StopDragging();
                 nowPlaying.Dispose();
+                timerCard.Dispose();
+                main.CountdownTimer.Changed -= RefreshTimerVisibility;
                 if (mouseHook != IntPtr.Zero) UnhookWindowsHookEx(mouseHook);
                 mouseHook = IntPtr.Zero;
                 mouseHookProc = null;
                 outputPopup.IsOpen = false;
                 main.CompareOff();
             };
+        }
+
+        private void RefreshTimerVisibility()
+        {
+            bool shown = main.CountdownTimer.IsShown;
+            timerCard.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
+            timerButton.SetResourceReference(StyleProperty, shown ? "AccentButton" : "GhostButton");
+            System.Windows.Automation.AutomationProperties.SetItemStatus(timerButton, shown ? "Таймер показан" : "Таймер скрыт");
         }
 
         private TextBlock Section(string text, bool first = false)

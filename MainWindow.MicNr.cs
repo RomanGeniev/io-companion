@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -27,7 +27,7 @@ namespace GraphiteCompanion
         private const double VoicePlotMinDb = -48;
         private const double VoicePlotMaxDb = 24;
         private static readonly int[] VoicePlotFrequencies = [50, 100, 300, 1000, 3000, 10000, 20000];
-        private static readonly int[] VoicePlotLevels = [24, 12, 0, -12, -24, -36, -48];
+        private static readonly int[] VoicePlotLevels = [24, 0, -24, -48];
         private int voiceSampleRate = DefaultMicSampleRate;
         private MicVoiceSettings plottedVoice = new();
 
@@ -65,7 +65,7 @@ namespace GraphiteCompanion
                 UpdateMicVoiceCard(ready: false);
                 return;
             }
-            string who = $"Микрофон: {mic.Name}.";
+            string who = $"Выбранный микрофон: {mic.Name}.";
             bool hasOwnAi = micSession?.Effects != null && micCards.Exists(c => c.Visibility == Visibility.Visible);
 
             if (!EqApoController.Installed) nrStep = NrStep.InstallApo;
@@ -76,24 +76,25 @@ namespace GraphiteCompanion
             NrSwitch.Visibility = nrStep == NrStep.Ready ? Visibility.Visible : Visibility.Collapsed;
             NrButton.Visibility = nrStep == NrStep.Ready ? Visibility.Collapsed : Visibility.Visible;
             string intro = "Нейросеть RNNoise убирает клавиатуру, вентиляторы и фоновый шум. " +
-                           (hasOwnAi ? "У этой гарнитуры есть и своё AI-шумоподавление выше — включайте что-то одно. " : "");
+                           (hasOwnAi ? "У этой гарнитуры есть и своё AI-шумоподавление — включайте что-то одно. " : "");
+            GraphiteCompanion.Controls.HelpTips.Set(NrCard, intro + who + " Для сравнения включите «Слышать себя» в наушниках.");
             switch (nrStep)
             {
                 case NrStep.InstallApo:
-                    NrText.Text = intro + who + " Нужен бесплатный Equalizer APO: в его окне отметьте этот микрофон на вкладке «Устройства записи» (Capture devices), затем перезагрузите компьютер.";
+                    NrText.Text = "Установите Equalizer APO, отметьте микрофон в «Устройствах записи» и перезагрузите компьютер.";
                     NrButtonText.Text = "Установить";
                     break;
                 case NrStep.AttachMic:
-                    NrText.Text = intro + who + " Откроется окно Equalizer APO — на вкладке «Устройства записи» (Capture devices) отметьте этот микрофон и нажмите OK, затем перезагрузите компьютер.";
+                    NrText.Text = "В Equalizer APO отметьте микрофон в «Устройствах записи», нажмите OK и перезагрузите компьютер.";
                     NrButtonText.Text = "Подключить микрофон";
                     break;
                 case NrStep.Reboot:
-                    NrText.Text = intro + who + " Осталось перезагрузить компьютер.";
+                    NrText.Text = "Для завершения подключения перезагрузите компьютер.";
                     NrButtonText.Text = "Перезагрузить";
                     break;
                 case NrStep.Ready:
                     NrSwitch.IsChecked = EqApoController.MicNoiseSuppressionOn(mic.Id);
-                    NrText.Text = intro + who + " Включите «Слышать себя» в блоке «Обработка голоса» и постучите по клавишам, чтобы услышать разницу.";
+                    NrText.Text = hasOwnAi ? "Используйте один шумодав: RNNoise или AI гарнитуры." : "Уменьшает клавиатуру и фоновый шум.";
                     break;
             }
         }
@@ -107,7 +108,7 @@ namespace GraphiteCompanion
             if (voiceDeviceId == null)
             {
                 LoadMicVoiceValues(new MicVoiceSettings());
-                SetMicVoiceStatus(mic == null ? "Выберите подключённый микрофон." : "Подключите выбранный микрофон к Equalizer APO кнопкой выше.");
+                SetMicVoiceStatus(mic == null ? "Выберите подключённый микрофон." : "Подключите микрофон к Equalizer APO слева.");
                 return;
             }
 
@@ -314,7 +315,7 @@ namespace GraphiteCompanion
 
         private void UpdateMicVoicePlotReadout(Point position, bool hovering)
         {
-            string status = plottedVoice.Enabled ? "Коррекция включена" : "Предпросмотр · коррекция выкл.";
+            string status = plottedVoice.Enabled ? "Включена" : "Предпросмотр · выкл.";
             Rect bounds = MicVoicePlotBounds;
             if (!hovering || bounds.Width <= 0 || !bounds.Contains(position))
             {
@@ -325,7 +326,7 @@ namespace GraphiteCompanion
             double fraction = (position.X - bounds.Left) / bounds.Width;
             double frequency = VoicePlotMinFrequency * Math.Pow(VoicePlotMaxFrequency / VoicePlotMinFrequency, fraction);
             double db = plottedVoice.ResponseDb(frequency, voiceSampleRate);
-            MicVoicePlotReadout.Text = $"{status}  ·  {frequency:0} Гц  ·  {db:+0.0;-0.0;0.0} дБ";
+            MicVoicePlotReadout.Text = $"{frequency:0} Гц  ·  {db:+0.0;-0.0;0.0} дБ";
             MicVoicePlotCursor.X1 = MicVoicePlotCursor.X2 = position.X;
             MicVoicePlotCursor.Y1 = bounds.Top;
             MicVoicePlotCursor.Y2 = bounds.Bottom;

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -100,7 +100,7 @@ namespace GraphiteCompanion
             if (shutdownStarted) return;
             // switching the Fluent theme re-creates control templates, which resets scroll positions;
             // remember them so the window stays where the user was
-            var scrollers = new[] { SidebarScroll, EffectsScroll, PageMic, PresetScroll, PageSettings };
+            var scrollers = new[] { SidebarScroll, EffectsScroll, PageMic, PageRecord, PresetScroll, PageSettings };
             var offsets = Array.ConvertAll(scrollers, s => s.VerticalOffset);
             void RestoreScroll()
             {
@@ -119,7 +119,8 @@ namespace GraphiteCompanion
             outputCards.Clear();
             micCards.Clear();
             BuildEffectCards();
-            pendingEffects.Clear();
+            BuildMonitorRows();
+            FlushEffects();
             ReloadEffects();
             osd?.Close();
             osd = null;
@@ -158,21 +159,10 @@ namespace GraphiteCompanion
             ApplyTheme();
         }
 
-        private sealed class ColorDialogOwner(IntPtr handle) : System.Windows.Forms.IWin32Window
-        {
-            public IntPtr Handle => handle;
-        }
-
         private void ChooseCustomAccent_Click(object sender, RoutedEventArgs e)
         {
-            var current = ThemeManager.FindAccent(settings.CustomAccent).Solid;
-            using var dialog = new System.Windows.Forms.ColorDialog
-            {
-                FullOpen = true, AnyColor = true,
-                Color = System.Drawing.Color.FromArgb(current.R, current.G, current.B),
-            };
-            if (dialog.ShowDialog(new ColorDialogOwner(new System.Windows.Interop.WindowInteropHelper(this).Handle)) == System.Windows.Forms.DialogResult.OK)
-                SetCustomAccent($"#{dialog.Color.R:X2}{dialog.Color.G:X2}{dialog.Color.B:X2}");
+            var dialog = new Controls.AccentColorWindow(this, ThemeManager.FindAccent(settings.CustomAccent).Solid);
+            if (dialog.ShowDialog() == true) SetCustomAccent(dialog.SelectedHex);
         }
 
         private void ApplyCustomAccent_Click(object sender, RoutedEventArgs e) => SetCustomAccent(CustomAccentBox.Text);

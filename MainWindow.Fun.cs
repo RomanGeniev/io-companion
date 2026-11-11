@@ -175,6 +175,24 @@ namespace GraphiteCompanion
         // ===================== Overlay (Win+G style) =====================
 
         private OverlayWindow? overlay;
+        private OverlayTimer? countdownTimer;
+        public OverlayTimer CountdownTimer
+        {
+            get
+            {
+                if (countdownTimer == null)
+                {
+                    countdownTimer = new OverlayTimer();
+                    countdownTimer.Completed += () =>
+                    {
+                        if (shutdownStarted) return;
+                        Beeper.TimerFinished();
+                        NotifyChange("Время вышло", "\uE916", "Таймер завершён");
+                    };
+                }
+                return countdownTimer;
+            }
+        }
 
         public void ToggleOverlay()
         {
