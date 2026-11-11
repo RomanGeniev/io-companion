@@ -76,7 +76,7 @@ namespace GraphiteCompanion
         private void StoreDeviceProfile()
         {
             // don't remember a mode that was switched on automatically for a program
-            if (session == null || applyingAuto || autoBackup != null) return;
+            if (session == null) return;
             settings.DeviceProfiles[session.Info.Id] = new DeviceProfile
             {
                 Mode = settings.Mode,

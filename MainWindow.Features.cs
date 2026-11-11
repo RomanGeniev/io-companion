@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -11,7 +11,7 @@ using GraphiteCompanion.Services;
 
 namespace GraphiteCompanion
 {
-    // Spectrum analyzer, mic level meter, default-device switching, volume limit, hearing test.
+    // Spectrum analyzer, mic level meter, default-device switching, volume limit.
     public partial class MainWindow
     {
         private readonly SpectrumAnalyzer analyzer = new();
@@ -37,7 +37,6 @@ namespace GraphiteCompanion
             InitAppearance();
             InitUpdates();
             InitDriver();
-            InitFun();
             InitRecord();
             UpdateBrand();
             UpdateMeters();
@@ -46,9 +45,6 @@ namespace GraphiteCompanion
         private void DisposeFeatures()
         {
             visualTimer?.Stop();
-            DisposeFun();
-            recTimer?.Stop();
-            foreach (var s in svcs.Values) s.Dispose();
             analyzer.Dispose();
             micMeter.Dispose();
         }
@@ -69,6 +65,7 @@ namespace GraphiteCompanion
         /// <summary>A few seconds after the window disappears into the tray, give its memory back to Windows.</summary>
         private void ScheduleTrim()
         {
+            if (shutdownStarted) return;
             trimTimer ??= new DispatcherTimer(DispatcherPriority.ApplicationIdle) { Interval = TimeSpan.FromSeconds(4) };
             trimTimer.Stop();
             if (IsVisible && WindowState != WindowState.Minimized) return;
@@ -97,23 +94,17 @@ namespace GraphiteCompanion
             EqSwitch.IsEnabled = eqUsable;
             ClipGuardSwitch.IsEnabled = eqUsable;
             FlatButton.IsEnabled = eqUsable;
-            HearingTestButton.IsEnabled = hasEq;
             if (!eqUsable) ResetButton.IsEnabled = false;
 
             bool anyEffect = outputCards.Any(c => c.Visibility == Visibility.Visible);
             bool noEffects = connected && (session!.Effects == null || !anyEffect);
             EffectsEmpty.Visibility = noEffects ? Visibility.Visible : Visibility.Collapsed;
-            LinkEffectsSwitch.Visibility = noEffects ? Visibility.Collapsed : Visibility.Visible;
             ResetEffectsButton.Visibility = noEffects ? Visibility.Collapsed : Visibility.Visible;
-            EffectsProfileText.Visibility = noEffects ? Visibility.Collapsed : Visibility.Visible;
             if (noEffects) foreach (var c in outputCards) c.Visibility = Visibility.Collapsed;
 
             // tabs: show only what the selected device can do
-            TabMic.Visibility = micSession != null ? Visibility.Visible : Visibility.Collapsed;
             TabEffects.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
-            TabMixer.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
-            foreach (var tab in new[] { TabMic, TabEffects, TabMixer })
-                if (tab.IsChecked == true && tab.Visibility != Visibility.Visible) TabEq.IsChecked = true;
+            if (TabEffects.IsChecked == true && TabEffects.Visibility != Visibility.Visible) TabEq.IsChecked = true;
             UpdateDriverOffer();
             UpdateApoOffer();
         }
@@ -185,38 +176,6 @@ namespace GraphiteCompanion
         {
             settings.Analyzer = AnalyzerSwitch.IsChecked == true;
             UpdateMeters();
-            ScheduleSave();
-        }
-
-        // ===================== Hearing test =====================
-
-        private void HearingTest_Click(object sender, RoutedEventArgs e)
-        {
-            if (session?.Eq == null)
-            {
-                MessageBox.Show(this, "Для теста слуха нужен эквалайзер: встроенный C-Media или Equalizer APO.", Title);
-                return;
-            }
-            CompareOn(); // EQ and effects off for clean test tones
-            int[]? result = null;
-            try
-            {
-                var dlg = new HearingTestWindow(session.Info.Id) { Owner = this };
-                if (dlg.ShowDialog() == true) result = dlg.Result;
-            }
-            finally
-            {
-                CompareOff();
-            }
-            if (result == null) return;
-
-            const string name = "Мой слух";
-            settings.Custom.RemoveAll(c => c.Name == name);
-            settings.Custom.Insert(0, new CustomPreset { Name = name, Bands = result });
-            ForgetAutoState();
-            settings.ActiveCustom = name;
-            RefreshCustomList();
-            LoadPresetToUi();
             ScheduleSave();
         }
 

@@ -23,8 +23,29 @@ namespace GraphiteCompanion.Services
         public static AccentInfo Current { get; private set; } = Accents[0];
         public static bool IsLight { get; private set; }
 
-        public static AccentInfo FindAccent(string? key) =>
-            Array.Find(Accents, a => a.Key == key) ?? Accents[0];
+        public static AccentInfo FindAccent(string? key)
+        {
+            if (TryCustomColor(key, out var color))
+                return new AccentInfo($"#{color.R:X2}{color.G:X2}{color.B:X2}", "Свой цвет", color, color, color);
+            return Array.Find(Accents, a => a.Key == key) ?? Accents[0];
+        }
+
+        public static bool TryCustomColor(string? text, out Color color)
+        {
+            color = default;
+            text = text?.Trim();
+            if (text is not { Length: 7 } || text[0] != '#' ||
+                !uint.TryParse(text.AsSpan(1), System.Globalization.NumberStyles.AllowHexSpecifier,
+                    System.Globalization.CultureInfo.InvariantCulture, out uint rgb)) return false;
+            color = Color.FromRgb((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+            return true;
+        }
+
+        private static double Luminance(Color c)
+        {
+            static double Channel(byte b) { double v = b / 255.0; return v <= .04045 ? v / 12.92 : Math.Pow((v + .055) / 1.055, 2.4); }
+            return .2126 * Channel(c.R) + .7152 * Channel(c.G) + .0722 * Channel(c.B);
+        }
 
         public static bool SystemUsesLight()
         {
@@ -70,7 +91,12 @@ namespace GraphiteCompanion.Services
                 r["SelectedBrush"] = Freeze(new SolidColorBrush(Mix(Hex("#141A26"), accent.Solid, 0.16)));
             }
 
-            r["AccentBrush"] = Freeze(new SolidColorBrush(accent.Solid));
+            bool custom = TryCustomColor(accentKey, out _);
+            Color readable = accent.Solid;
+            if (custom && (light ? Luminance(readable) > .4 : Luminance(readable) < .15))
+                readable = Mix(readable, light ? Colors.Black : Colors.White, .55);
+            r["AccentBrush"] = Freeze(new SolidColorBrush(readable));
+            r["AccentTextBrush"] = Freeze(new SolidColorBrush(custom && Luminance(accent.Solid) > .179 ? Colors.Black : Colors.White));
             r["AccentBorderBrush"] = Freeze(new SolidColorBrush(WithAlpha(accent.Solid, 0x60)));
             r["AccentGradient"] = Freeze(new LinearGradientBrush(accent.A, accent.B, new Point(0, 0), new Point(1, 1)));
             r["CurveFillBrush"] = Freeze(new LinearGradientBrush(WithAlpha(accent.A, 0x55), WithAlpha(accent.B, 0x08), 90));

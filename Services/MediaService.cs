@@ -1,7 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Automation;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Windows.Media.Control;
@@ -116,15 +120,12 @@ namespace GraphiteCompanion.Services
             {
                 using var ras = await thumb.OpenReadAsync();
                 using var src = ras.AsStreamForRead();
-                var ms = new MemoryStream();
-                await src.CopyToAsync(ms);
-                if (ms.Length == 0) return null;
-                ms.Position = 0;
+                if (src.Length == 0) return null;
                 var bmp = new BitmapImage();
                 bmp.BeginInit();
                 bmp.CacheOption = BitmapCacheOption.OnLoad;
                 bmp.DecodePixelWidth = 300;
-                bmp.StreamSource = ms;
+                bmp.StreamSource = src;
                 bmp.EndInit();
                 bmp.Freeze();
                 return bmp;
@@ -175,40 +176,81 @@ namespace GraphiteCompanion.Services
         /// <summary>True while the seek fallback is talking to the player's own window; it may briefly
         /// steal the focus, and the overlay must not treat that as "the user went elsewhere".</summary>
         public static bool SeekInProgress { get; private set; }
+        private static readonly SemaphoreSlim seekGate = new(1, 1);
 
-        public static async Task<bool> Seek(TimeSpan position)
+        public static async Task<bool> Seek(TimeSpan position, CancellationToken cancellationToken = default)
+        {
+            await seekGate.WaitAsync(cancellationToken);
+            try { return await SeekCore(position, cancellationToken); }
+            finally { seekGate.Release(); }
+        }
+
+        private static async Task<bool> SeekCore(TimeSpan position, CancellationToken cancellationToken)
         {
             var s = await Session();
             if (s == null) return false;
+            cancellationToken.ThrowIfCancellationRequested();
 
-            TimeSpan duration = TimeSpan.Zero, before = TimeSpan.Zero;
+            GlobalSystemMediaTransportControlsSessionTimelineProperties timeline;
+            bool preferSlider;
+            bool appleMusic;
             try
             {
-                var tl = s.GetTimelineProperties();
-                duration = tl.EndTime - tl.StartTime;
-                before = tl.Position - tl.StartTime;
-                await s.TryChangePlaybackPositionAsync((tl.StartTime + position).Ticks);
+                timeline = s.GetTimelineProperties();
+                appleMusic = AppName(s.SourceAppUserModelId) == "Apple Music";
+                preferSlider = appleMusic || !s.GetPlaybackInfo().Controls.IsPlaybackPositionEnabled;
             }
-            catch { }
+            catch { return false; }
 
-            // Some apps answer "done" and silently ignore the command (Apple Music does):
-            // wait a moment and check that the position really moved.
+            if (!preferSlider && await SeekWithSystem(s, timeline.StartTime + position, cancellationToken)) return true;
+
+            var duration = timeline.EndTime - timeline.StartTime;
+            var before = timeline.Position - timeline.StartTime;
+            if (await SeekWithSlider(position, duration, before, appleMusic, cancellationToken)) return true;
+
+            // A player may leave its controls disabled or have its window closed while still accepting system seeks.
+            return preferSlider && await SeekWithSystem(s, timeline.StartTime + position, cancellationToken);
+        }
+
+        private static async Task<bool> SeekWithSystem(MediaSession session, TimeSpan position, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var confirmed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            void CheckPosition()
+            {
+                try
+                {
+                    if (Math.Abs((session.GetTimelineProperties().Position - position).TotalSeconds) < 1.25)
+                        confirmed.TrySetResult(true);
+                }
+                catch { }
+            }
+
+            void TimelineChanged(MediaSession sender, TimelinePropertiesChangedEventArgs args) => CheckPosition();
             try
             {
-                await System.Threading.Tasks.Task.Delay(700);
-                var tl2 = s.GetTimelineProperties();
-                var now = tl2.Position - tl2.StartTime;
-                if (Math.Abs((now - position).TotalSeconds) < 2.5) return true;
+                session.TimelinePropertiesChanged += TimelineChanged;
+                if (!await session.TryChangePlaybackPositionAsync(position.Ticks)) return false;
+                CheckPosition();
+                // React to the first confirmed update. Only a player that reports success without moving waits.
+                var result = await Task.WhenAny(confirmed.Task, Task.Delay(220, cancellationToken));
+                cancellationToken.ThrowIfCancellationRequested();
+                return result == confirmed.Task;
             }
-            catch { }
+            catch (OperationCanceledException) { throw; }
+            catch { return false; }
+            finally { try { session.TimelinePropertiesChanged -= TimelineChanged; } catch { } }
+        }
 
-            // The last resort drags the player's own slider, and that activates its window:
-            // remember what was in front (usually our overlay) and put it back afterwards.
+        private static async Task<bool> SeekWithSlider(TimeSpan position, TimeSpan duration, TimeSpan before, bool appleMusic,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             SeekInProgress = true;
             IntPtr front = GetForegroundWindow();
             try
             {
-                return await System.Threading.Tasks.Task.Run(() => SeekViaUiAutomation(position, duration, before, front));
+                return await Task.Run(() => SeekViaUiAutomation(position, duration, before, appleMusic, front, cancellationToken), cancellationToken);
             }
             finally { SeekInProgress = false; }
         }
@@ -221,35 +263,38 @@ namespace GraphiteCompanion.Services
         /// was in front before (SetValue raises the player's window) — the focus goes back to it
         /// and the player's window is pushed back below, so a borderless game never sees it.
         /// </summary>
-        private static bool SeekViaUiAutomation(TimeSpan target, TimeSpan duration, TimeSpan before, IntPtr restoreForeground)
+        private static bool SeekViaUiAutomation(TimeSpan target, TimeSpan duration, TimeSpan before, bool appleMusic,
+            IntPtr restoreForeground, CancellationToken cancellationToken)
         {
             if (duration <= TimeSpan.Zero) return false;
             try
             {
-                var root = System.Windows.Automation.AutomationElement.RootElement;
-                var windows = root.FindAll(System.Windows.Automation.TreeScope.Children,
-                    System.Windows.Automation.Condition.TrueCondition);
-                var sliderCond = new System.Windows.Automation.PropertyCondition(
-                    System.Windows.Automation.AutomationElement.ControlTypeProperty,
-                    System.Windows.Automation.ControlType.Slider);
+                var root = AutomationElement.RootElement;
+                var windows = root.FindAll(TreeScope.Children, PlayerWindowCondition(appleMusic));
+                var sliderCond = new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Slider);
+                var scrubberCond = new PropertyCondition(AutomationElement.AutomationIdProperty, "LCDScrubber");
 
-                foreach (System.Windows.Automation.AutomationElement win in windows)
+                foreach (AutomationElement win in windows)
                 {
+                    if (cancellationToken.IsCancellationRequested) return false;
                     try
                     {
                         if (win.Current.ProcessId == Environment.ProcessId) continue;
-                        var sliders = win.FindAll(System.Windows.Automation.TreeScope.Descendants, sliderCond);
-                        foreach (System.Windows.Automation.AutomationElement sl in sliders)
+                        var sliders = win.FindAll(TreeScope.Descendants, appleMusic ? scrubberCond : sliderCond);
+                        bool exactScrubber = appleMusic && sliders.Count > 0;
+                        if (appleMusic && !exactScrubber) sliders = win.FindAll(TreeScope.Descendants, sliderCond);
+                        foreach (AutomationElement sl in sliders)
                         {
-                            object? p = null;
-                            if (!sl.TryGetCurrentPattern(System.Windows.Automation.RangeValuePattern.Pattern, out p)) continue;
-                            var rv = (System.Windows.Automation.RangeValuePattern)p;
+                            if (cancellationToken.IsCancellationRequested) return false;
+                            if (!sl.TryGetCurrentPattern(RangeValuePattern.Pattern, out var p)) continue;
+                            var rv = (RangeValuePattern)p;
                             var cur = rv.Current;
                             if (cur.IsReadOnly) continue;
                             // match the session's track: length ≈ duration, value ≈ position before the seek
                             if (Math.Abs(cur.Maximum - duration.TotalSeconds) > Math.Max(5, duration.TotalSeconds * 0.08)) continue;
-                            if (Math.Abs(cur.Value - before.TotalSeconds) > 10) continue;
-                            rv.SetValue((double)target.TotalSeconds);
+                            if (!exactScrubber && Math.Abs(cur.Value - before.TotalSeconds) > 10) continue;
+                            if (cancellationToken.IsCancellationRequested) return false;
+                            rv.SetValue(Math.Clamp(target.TotalSeconds, cur.Minimum, cur.Maximum));
                             // SetValue raised the player's window (focus and z-order): undo both.
                             IntPtr player = win.Current.NativeWindowHandle;
                             if (restoreForeground != IntPtr.Zero && restoreForeground != player)
@@ -267,6 +312,22 @@ namespace GraphiteCompanion.Services
             }
             catch { }
             return false;
+        }
+
+        private static Condition PlayerWindowCondition(bool appleMusic)
+        {
+            if (!appleMusic) return Condition.TrueCondition;
+            var conditions = new List<Condition>();
+            foreach (var process in Process.GetProcessesByName("AppleMusic"))
+            {
+                using (process) conditions.Add(new PropertyCondition(AutomationElement.ProcessIdProperty, process.Id));
+            }
+            return conditions.Count switch
+            {
+                0 => Condition.FalseCondition,
+                1 => conditions[0],
+                _ => new OrCondition(conditions.ToArray()),
+            };
         }
 
         /// <summary>

@@ -12,24 +12,10 @@ using GraphiteCompanion.Services;
 
 namespace GraphiteCompanion
 {
-    // AutoEq presets, per-game profiles, per-program volume, Discord status.
+    // AutoEq presets, per-program volume and overlay.
     public partial class MainWindow
     {
-        private DiscordPresence? discord;
         private int mixerTick;
-
-        private void InitFun()
-        {
-            DiscordSwitch.IsChecked = settings.DiscordEnabled;
-            DiscordIdBox.Text = settings.DiscordAppId ?? "";
-            DiscordSetup.Visibility = settings.DiscordEnabled ? Visibility.Visible : Visibility.Collapsed;
-            UpdateDiscord();
-        }
-
-        private void DisposeFun()
-        {
-            if (discord != null) { _ = discord.ClearAsync(); discord.Dispose(); }
-        }
 
         /// <summary>Called from the 1-second poll timer.</summary>
         private void FunTick()
@@ -51,33 +37,11 @@ namespace GraphiteCompanion
             string name = dlg.ResultName.Length > 40 ? dlg.ResultName[..40] : dlg.ResultName;
             settings.Custom.RemoveAll(c => c.Name == name);
             settings.Custom.Add(new CustomPreset { Name = name, Bands = dlg.ResultBands });
-            ForgetAutoState();
             settings.ActiveCustom = name;
             RefreshCustomList();
             LoadPresetToUi();
             ScheduleSave();
             NotifyChange("Пресет добавлен", "", name);
-        }
-
-        // ===================== Per-game profiles =====================
-
-        /// <summary>Copies the current sound (EQ + effects) into a preset of its own for this program and links the rule to it.</summary>
-        private void MakeGameProfile(AppRule rule)
-        {
-            string name = "Игра: " + (string.IsNullOrEmpty(rule.Title) ? rule.Process : rule.Title);
-            if (name.Length > 40) name = name[..40];
-            if (!settings.Custom.Any(c => c.Name == name))
-            {
-                settings.Custom.Add(new CustomPreset
-                {
-                    Name = name,
-                    Bands = (int[])bands.Clone(),
-                    Effects = currentEffects.Count > 0 ? new Dictionary<string, int>(currentEffects) : null,
-                });
-            }
-            rule.Target = "custom:" + name;
-            RefreshCustomList();
-            ScheduleSave();
         }
 
         // ===================== Per-program volume =====================
@@ -96,7 +60,7 @@ namespace GraphiteCompanion
             {
                 var row = new Grid();
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(180) });
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 row.ColumnDefinitions.Add(new ColumnDefinition());
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(48) });
@@ -126,6 +90,7 @@ namespace GraphiteCompanion
                 row.Children.Add(mute);
 
                 var slider = new Slider { Value = app.Volume, VerticalAlignment = VerticalAlignment.Center };
+                HelpTips.Set(slider, "Громкость только этой программы на выбранном устройстве. Остальные программы не меняются. Для обычных приложений уровень запоминается; 100% убирает дополнительное уменьшение громкости.");
                 slider.SetResourceReference(StyleProperty, "VolumeSlider");
                 Grid.SetColumn(slider, 3);
                 row.Children.Add(slider);
@@ -151,13 +116,37 @@ namespace GraphiteCompanion
                 {
                     bool m = mute.IsChecked == true;
                     ((TextBlock)mute.Content).Text = m ? "" : "";
+                    HelpTips.Set(mute, m ? "Включить звук этой программы. Остальные приложения не изменятся." : "Выключить звук только этой программы. Уровень её громкости сохраняется.");
                     try { AppVolumeMixer.Set(deviceId, process, null, m); } catch { }
                 };
+
+                HelpTips.Set(mute, app.Muted ? "Включить звук этой программы. Остальные приложения не изменятся." : "Выключить звук только этой программы. Уровень её громкости сохраняется.");
 
                 var card = new Border { Padding = new Thickness(16, 10, 16, 10), Margin = new Thickness(0, 0, 0, 8), CornerRadius = new CornerRadius(12), Child = row };
                 card.SetResourceReference(Border.BackgroundProperty, "CardBrush");
                 MixerList.Children.Add(card);
             }
+        }
+
+        private void MixerOpen_Click(object sender, RoutedEventArgs e)
+        {
+            MixerPopup.IsOpen = !MixerPopup.IsOpen;
+        }
+
+        private void MixerPopup_Opened(object sender, EventArgs e)
+        {
+            RefreshMixer();
+            MixerRefreshButton.Focus();
+        }
+
+        private void MixerClose_Click(object sender, RoutedEventArgs e) => MixerPopup.IsOpen = false;
+
+        private void MixerPopup_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key != System.Windows.Input.Key.Escape) return;
+            MixerPopup.IsOpen = false;
+            MixerOpenButton.Focus();
+            e.Handled = true;
         }
 
         private void MixerRefresh_Click(object sender, RoutedEventArgs e) => RefreshMixer();
@@ -189,58 +178,11 @@ namespace GraphiteCompanion
 
         public void ToggleOverlay()
         {
+            if (shutdownStarted) return;
             if (overlay is { IsVisible: true }) { overlay.Close(); return; }
             overlay = new OverlayWindow(this);
-            overlay.Closed += (_, _) => { overlay = null; if (PageMixer.IsVisible) RefreshMixer(); };
+            overlay.Closed += (_, _) => { overlay = null; ScheduleTrim(); if (MixerPopup.IsOpen) RefreshMixer(); };
             overlay.Open();
-        }
-
-        // ===================== Discord =====================
-
-        private void UpdateDiscord()
-        {
-            if (!settings.DiscordEnabled || string.IsNullOrWhiteSpace(settings.DiscordAppId))
-            {
-                if (discord != null) { _ = discord.ClearAsync(); discord.Dispose(); discord = null; }
-                return;
-            }
-            discord ??= new DiscordPresence(settings.DiscordAppId!.Trim());
-            string details = settings.ActiveCustom != null ? settings.ActiveCustom : "Режим: " + FactoryPresets.Name(settings.Mode);
-            string state = session != null ? "🎧 " + ShortDeviceName() : "Наушники не подключены";
-            var d = discord;
-            _ = d.UpdateAsync(details, state).ContinueWith(_ => Dispatcher.BeginInvoke(new Action(() =>
-            {
-                if (DiscordStatus != null && settings.DiscordEnabled)
-                    DiscordStatus.Text = d.Connected ? "Подключено к Discord ✓" : "Discord не запущен или Application ID неверный";
-            })));
-        }
-
-        private string ShortDeviceName()
-        {
-            string name = session?.Info.Name ?? "";
-            int open = name.IndexOf('('), close = name.LastIndexOf(')');
-            return open >= 0 && close > open ? name.Substring(open + 1, close - open - 1) : name;
-        }
-
-        private void DiscordSwitch_Click(object sender, RoutedEventArgs e)
-        {
-            settings.DiscordEnabled = DiscordSwitch.IsChecked == true;
-            DiscordSetup.Visibility = settings.DiscordEnabled ? Visibility.Visible : Visibility.Collapsed;
-            if (settings.DiscordEnabled && string.IsNullOrWhiteSpace(settings.DiscordAppId))
-                DiscordStatus.Text = "Вставьте Application ID — и статус появится.";
-            UpdateDiscord();
-            ScheduleSave();
-        }
-
-        private void DiscordIdBox_LostFocus(object sender, RoutedEventArgs e)
-        {
-            string id = new string(DiscordIdBox.Text.Where(char.IsDigit).ToArray());
-            DiscordIdBox.Text = id;
-            if (id == (settings.DiscordAppId ?? "")) return;
-            settings.DiscordAppId = id.Length > 0 ? id : null;
-            if (discord != null) { discord.Dispose(); discord = null; }
-            UpdateDiscord();
-            ScheduleSave();
         }
 
     }

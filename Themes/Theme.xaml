@@ -10,6 +10,7 @@
     <SolidColorBrush x:Key="InsetBrush" Color="#0F141F"/>
     <SolidColorBrush x:Key="TextBrush" Color="#E8ECF4"/>
     <SolidColorBrush x:Key="SubTextBrush" Color="#8A94A8"/>
+    <SolidColorBrush x:Key="AccentTextBrush" Color="White"/>
     <SolidColorBrush x:Key="AccentBrush" Color="#6E97FF"/>
     <SolidColorBrush x:Key="GoodBrush" Color="#3DDC97"/>
     <SolidColorBrush x:Key="WarnBrush" Color="#F5A524"/>
@@ -68,7 +69,7 @@
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="b" Property="Background" Value="{DynamicResource AccentGradient}"/>
-                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -322,7 +323,7 @@
     </Style>
 
     <Style x:Key="AccentButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
-        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -373,7 +374,7 @@
     </Style>
 
     <Style x:Key="RoundAccentButton" TargetType="Button" BasedOn="{StaticResource RoundGhostButton}">
-        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}"/>
         <Setter Property="Width" Value="52"/>
         <Setter Property="Height" Value="52"/>
         <Setter Property="Template">
@@ -447,6 +448,7 @@
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="track" Property="Background" Value="{DynamicResource AccentGradient}"/>
                             <Setter TargetName="knob" Property="HorizontalAlignment" Value="Right"/>
+                            <Setter TargetName="knob" Property="Fill" Value="{DynamicResource AccentTextBrush}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="track" Property="Opacity" Value="0.4"/>
@@ -457,4 +459,20 @@
         </Setter>
     </Style>
 
+  <Style TargetType="ToolTip">
+    <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="HasDropShadow" Value="False" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ToolTip">
+          <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="{TemplateBinding Padding}">
+            <ContentPresenter />
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
 </ResourceDictionary>

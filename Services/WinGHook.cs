@@ -30,14 +30,17 @@ namespace GraphiteCompanion.Services
         [DllImport("kernel32.dll")] private static extern IntPtr GetModuleHandle(string? name);
 
         private const int WhKeyboardLl = 13, WmKeyDown = 0x100, WmSysKeyDown = 0x104;
-        private const uint VkG = 0x47, VkLWin = 0x5B, VkRWin = 0x5C, LlkhfInjected = 0x10;
+        private const uint VkG = 0x47, VkEscape = 0x1B, VkLWin = 0x5B, VkRWin = 0x5C, LlkhfInjected = 0x10;
         private static readonly IntPtr Marker = new(0x10C0); // dwExtraInfo of our own injected key
 
         private readonly HookProc proc;   // kept alive: the hook holds only a native pointer
         private IntPtr hook;
         private bool gHeld;
+        private bool escapeHeld;
 
         public event Action? Pressed;
+        /// <summary>Returns true only when an open overlay accepts Escape. Keep this callback short.</summary>
+        public Func<bool>? EscapePressed { get; set; }
         public bool Active => hook != IntPtr.Zero;
 
         public WinGHook()
@@ -54,6 +57,19 @@ namespace GraphiteCompanion.Services
                 var k = Marshal.PtrToStructure<KbdLlHook>(lParam);
                 bool ours = (k.flags & LlkhfInjected) != 0 && k.extra == Marker;
                 bool down = wParam == (IntPtr)WmKeyDown || wParam == (IntPtr)WmSysKeyDown;
+                if (!ours && k.vkCode == VkEscape)
+                {
+                    if (down && (escapeHeld || EscapePressed?.Invoke() == true))
+                    {
+                        escapeHeld = true;
+                        return (IntPtr)1;
+                    }
+                    if (!down && escapeHeld)
+                    {
+                        escapeHeld = false;
+                        return (IntPtr)1;
+                    }
+                }
                 if (!ours && k.vkCode == VkG)
                 {
                     if (down && WinDown())

@@ -24,7 +24,6 @@ namespace GraphiteCompanion.Services
         private readonly WF.ToolStripMenuItem eqItem;
 
         public event Action? OpenRequested;
-        public event Action? FlyoutRequested;
         public event Action? MicMuteRequested;
         public event Action? ExitRequested;
         public event Action? ToggleEqRequested;
@@ -71,8 +70,7 @@ namespace GraphiteCompanion.Services
                 ContextMenuStrip = menu,
                 Visible = true,
             };
-            icon.MouseClick += (_, e) => { if (e.Button == WF.MouseButtons.Left) FlyoutRequested?.Invoke(); };
-            icon.MouseDoubleClick += (_, e) => { if (e.Button == WF.MouseButtons.Left) OpenRequested?.Invoke(); };
+            icon.MouseClick += (_, e) => { if (e.Button == WF.MouseButtons.Left) OpenRequested?.Invoke(); };
         }
 
         public void UpdateState(Earpad pad, ListeningMode? mode, bool eqEnabled, string presetTitle)

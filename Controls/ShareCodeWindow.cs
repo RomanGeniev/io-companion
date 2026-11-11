@@ -35,7 +35,7 @@ namespace GraphiteCompanion.Controls
             {
                 TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 14),
                 Text = code != null
-                    ? "Отправьте этот код другу. Он нажмёт «Код» в «Моих пресетах», вставит его — и получит ваш эквалайзер и эффекты."
+                    ? "Отправьте этот код другу. Он нажмёт «Ввести код» в «Моих пресетах», вставит его — и получит вашу настройку эквалайзера."
                     : "Вставьте код, который вам прислали (например IO-1A2B-…). Пресет появится в «Моих пресетах».",
             };
             hint.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");

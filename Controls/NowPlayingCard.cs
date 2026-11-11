@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -15,10 +16,14 @@ namespace GraphiteCompanion.Controls
     /// Mini player for the overlay: cover, title / artist / app, a seek bar with elapsed and remaining time,
     /// previous / play-pause / next. Shows whatever Windows reports as the current media session.
     /// </summary>
-    public sealed class NowPlayingCard : Border
+    public sealed class NowPlayingCard : Border, IDisposable
     {
         private readonly MainWindow main;
-        private readonly Image backdrop = new() { Stretch = Stretch.UniformToFill, Opacity = 0, Effect = new BlurEffect { Radius = 60, RenderingBias = RenderingBias.Performance } };
+        private readonly Canvas backdropLayer = new()
+        {
+            IsHitTestVisible = false, Opacity = 0, CacheMode = new BitmapCache { RenderAtScale = 0.5 },
+        };
+        private readonly Image backdrop = new() { Stretch = Stretch.UniformToFill, Effect = new BlurEffect { Radius = 60, RenderingBias = RenderingBias.Performance } };
         private readonly Border coverBox = new() { Width = 112, Height = 112, CornerRadius = new CornerRadius(14) };
         private readonly Image coverImage = new() { Stretch = Stretch.UniformToFill };
         private readonly TextBlock coverGlyph = new() { Text = "", FontSize = 40, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.55 };
@@ -40,6 +45,9 @@ namespace GraphiteCompanion.Controls
         private DateTime ignoreUntil;     // after a seek / skip the app needs a moment before it reports the new position
         private int tick;
         private int seekFails;           // apps whose system seek was ignored: they may still work via their own slider
+        private CancellationTokenSource? seekRequest;
+        private bool panelMoving;
+        private bool disposed;
 
         private static T R<T>(string key) => (T)Application.Current.FindResource(key);
 
@@ -53,6 +61,18 @@ namespace GraphiteCompanion.Controls
             Point origin = thumb.TranslatePoint(new Point(0, 0), slider);   // thumb's top-left in slider coords
             return p.X >= origin.X - 4 && p.X <= origin.X + thumb.ActualWidth + 4
                 && p.Y >= origin.Y - 4 && p.Y <= origin.Y + thumb.ActualHeight + 4;
+        }
+
+        private void SeekToPoint(Track track, Point point)
+        {
+            double thumbWidth = track.Thumb?.ActualWidth ?? 0;
+            double travel = track.ActualWidth - thumbWidth;
+            if (travel <= 0) return;
+            // Absolute geometry only: Track.ValueFromPoint combines the current Value with
+            // a cached thumb center, which is stale between mouse events and the next Arrange.
+            double fraction = Math.Clamp((point.X - thumbWidth / 2) / travel, 0, 1);
+            if (track.IsDirectionReversed) fraction = 1 - fraction;
+            seek.Value = seek.Minimum + fraction * (seek.Maximum - seek.Minimum);
         }
 
         public NowPlayingCard(MainWindow main)
@@ -107,6 +127,9 @@ namespace GraphiteCompanion.Controls
             // window slider, so dragging is allowed whenever a timeline exists; after two
             // ignored seeks in a row the bar gives up and becomes read-only.
             seek.SetResourceReference(StyleProperty, "VolumeSlider");
+            // Our handler owns track clicks as well as scrubbing. Otherwise Slider's class
+            // handler marks the event handled before we can remember to send the seek command.
+            seek.IsMoveToPointEnabled = false;
             seek.Minimum = 0;
             seek.Maximum = 1;
             seek.SmallChange = 5;
@@ -116,16 +139,15 @@ namespace GraphiteCompanion.Controls
             {
                 if (!CanDragSeek()) { e0.Handled = true; return; }   // read-only: no drag, no click-to-point
                 // Click anywhere on the track = jump right there, and keep scrubbing while the
-                // button is held. IsMoveToPointEnabled never fires with this template (the click
-                // lands on the ±LargeChange RepeatButton), and Thumb.IsMouseOver is unreliable
+                // button is held. The built-in move-to-point handler is disabled above;
+                // Thumb.IsMouseOver is unreliable
                 // (it stays true while the thumb has the mouse captured after a drag), so hit-test
                 // the thumb's actual geometry instead.
                 var track = seek.Template.FindName("PART_Track", seek) as System.Windows.Controls.Primitives.Track;
                 if (track?.Thumb != null && !OnThumb(seek, track, e0.GetPosition(seek)))
                 {
-                    double v = track.ValueFromPoint(e0.GetPosition(track));
-                    if (!double.IsNaN(v)) seek.Value = Math.Clamp(v, 0, seek.Maximum);
                     dragging = scrubbing = true;
+                    SeekToPoint(track, e0.GetPosition(track));
                     seek.CaptureMouse();   // keep scrubbing even if the cursor leaves the bar
                     e0.Handled = true;   // the Thumb must not start a drag from a track click
                 }
@@ -136,19 +158,39 @@ namespace GraphiteCompanion.Controls
                 // scrubbing after a track click: the bar follows the mouse until the button is released
                 if (!scrubbing || e0.LeftButton != MouseButtonState.Pressed) return;
                 if (seek.Template.FindName("PART_Track", seek) is not System.Windows.Controls.Primitives.Track track) return;
-                double v = track.ValueFromPoint(e0.GetPosition(track));
-                if (!double.IsNaN(v)) seek.Value = Math.Clamp(v, 0, seek.Maximum);
+                SeekToPoint(track, e0.GetPosition(track));
             };
             seek.PreviewMouseLeftButtonUp += async (_, _) =>
             {
                 if (!dragging) return;
                 dragging = scrubbing = false;
                 if (seek.IsMouseCaptured) seek.ReleaseMouseCapture();
+                if (state == null) return;
                 var to = TimeSpan.FromSeconds(seek.Value);
-                if (state != null) { state = With(state, to, state.Playing); stateTime = DateTime.Now; }
+                string key = state.Key;
+                state = With(state, to, state.Playing);
+                stateTime = DateTime.Now;
                 ignoreUntil = DateTime.Now.AddMilliseconds(1500);   // the UIA fallback path needs longer
-                bool applied = await MediaService.Seek(to);
-                if (!applied && ++seekFails >= 2) Show();   // both channels dead: flip to read-only
+                seekRequest?.Cancel();
+                var request = seekRequest = new CancellationTokenSource();
+                try
+                {
+                    bool applied = await MediaService.Seek(to, request.Token);
+                    if (request != seekRequest || state?.Key != key) return;
+                    if (applied) seekFails = 0;
+                    else if (++seekFails >= 2) Show();
+                }
+                catch (OperationCanceledException) when (request.IsCancellationRequested) { }
+                catch (Exception ex) { SettingsStore.LogError(ex); }
+                finally
+                {
+                    if (seekRequest == request)
+                    {
+                        seekRequest = null;
+                        ignoreUntil = DateTime.Now.AddMilliseconds(700);
+                    }
+                    request.Dispose();
+                }
             };
             seek.ValueChanged += (_, e) => { if (!settingValue) ShowTimes(TimeSpan.FromSeconds(e.NewValue)); };
 
@@ -181,8 +223,8 @@ namespace GraphiteCompanion.Controls
 
             // blurred cover behind everything, clipped to the rounded card
             // the picture sits on a Canvas so it never makes the card taller: it is sized to the card instead
-            var back = new Canvas { IsHitTestVisible = false, Children = { backdrop } };
-            var root = new Grid { Children = { back, body } };
+            backdropLayer.Children.Add(backdrop);
+            var root = new Grid { Children = { backdropLayer, body } };
             root.SizeChanged += (_, e) =>
             {
                 root.Clip = new RectangleGeometry(new Rect(e.NewSize), 15, 15);
@@ -195,8 +237,16 @@ namespace GraphiteCompanion.Controls
 
             timer.Tick += async (_, _) => await Tick();
             Loaded += async (_, _) => { timer.Start(); await Fetch(); };
-            Unloaded += (_, _) => timer.Stop();
+            Unloaded += (_, _) => { timer.Stop(); seekRequest?.Cancel(); };
             Show();
+        }
+
+        internal void SetPanelMoving(bool moving)
+        {
+            if (disposed) return;
+            panelMoving = moving;
+            if (moving) timer.Stop();
+            else if (IsLoaded && IsVisible) timer.Start();
         }
 
         private TextBlock Setup(Button b, string glyph, double size, string style)
@@ -235,12 +285,14 @@ namespace GraphiteCompanion.Controls
 
         private async System.Threading.Tasks.Task Fetch()
         {
-            if (busy) return;
+            if (disposed || busy || panelMoving) return;
             busy = true;
             try
             {
                 var s = await MediaService.GetAsync();
-                if (DateTime.Now < ignoreUntil && s != null && state != null && s.Key == state.Key) return;
+                if (disposed || panelMoving) return;
+                if ((dragging || seekRequest != null || DateTime.Now < ignoreUntil) && s != null && state != null && s.Key == state.Key) return;
+                if (s?.Key != state?.Key) seekRequest?.Cancel();
                 if (s == null || state == null || s.Key != state.Key) seekFails = 0;   // new track / app: give seeking a fresh chance
                 if (s != null && state != null && s.Key == state.Key && s.Playing == state.Playing)
                 {
@@ -270,6 +322,7 @@ namespace GraphiteCompanion.Controls
 
         private void Show()
         {
+            if (disposed) return;
             var s = state;
             bool has = s != null && (s.Title.Length > 0 || s.Artist.Length > 0);
             appText.Text = has ? ("СЕЙЧАС ИГРАЕТ · " + s!.App.ToUpperInvariant()).TrimEnd(' ', '·') : "МУЗЫКА";
@@ -288,7 +341,11 @@ namespace GraphiteCompanion.Controls
                 coverImage.Source = s?.Cover;
                 coverGlyph.Visibility = s?.Cover == null ? Visibility.Visible : Visibility.Collapsed;
                 backdrop.Source = s?.Cover;
-                backdrop.BeginAnimation(OpacityProperty, new DoubleAnimation(s?.Cover != null ? 0.32 : 0, TimeSpan.FromMilliseconds(400)));
+                double from = backdropLayer.Opacity;
+                double target = s?.Cover != null ? 0.32 : 0;
+                backdropLayer.Opacity = target;
+                backdropLayer.BeginAnimation(OpacityProperty, new DoubleAnimation(from, target, TimeSpan.FromMilliseconds(400))
+                    { FillBehavior = FillBehavior.Stop });
             }
 
             bool timeline = has && s!.Duration > TimeSpan.Zero;
@@ -325,5 +382,20 @@ namespace GraphiteCompanion.Controls
             Title = s.Title, Artist = s.Artist, App = s.App, Cover = s.Cover, Position = at, Duration = s.Duration,
             Playing = playing, CanPrevious = s.CanPrevious, CanNext = s.CanNext, CanSeek = s.CanSeek,
         };
+
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            timer.Stop();
+            seekRequest?.Cancel();
+            if (seek.IsMouseCaptureWithin) Mouse.Capture(null);
+            state = null;
+            coverImage.Source = null;
+            backdrop.Source = null;
+            backdrop.Effect = null;
+            backdropLayer.BeginAnimation(OpacityProperty, null);
+            backdropLayer.CacheMode = null;
+        }
     }
 }

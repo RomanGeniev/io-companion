@@ -87,42 +87,6 @@ namespace GraphiteCompanion.Models
             return (Guid.Parse(parts[0]), uint.Parse(parts[1]));
         }
 
-        /// <summary>All output effects off with standard levels.</summary>
-        public static System.Collections.Generic.Dictionary<string, int> DefaultSnapshot()
-        {
-            var d = new System.Collections.Generic.Dictionary<string, int>();
-            foreach (var def in Output)
-            {
-                d[Key(def.Format, def.EnablePid)] = def.DefaultEnabled ? 1 : 0;
-                foreach (var p in def.Params) d[Key(def.Format, p.Pid)] = p.Default;
-            }
-            return d;
-        }
-
-        /// <summary>Sensible effect combination for each listening mode (used until the user changes it).</summary>
-        public static System.Collections.Generic.Dictionary<string, int> ModeDefaults(ListeningMode mode)
-        {
-            var d = DefaultSnapshot();
-            switch (mode)
-            {
-                case ListeningMode.Games:
-                    // No virtual surround: in competitive games (CS2, Dota 2, Valorant) it blurs
-                    // positional cues; CS2 has its own HRTF. Users can enable 7.1 for single-player games.
-                    d[Key(Surround, 5)] = 1;   // keep "music / gaming" as the preferred 7.1 mode
-                    d[Key(Surround, 2)] = 1;   // medium room if the user turns 7.1 on
-                    break;
-                case ListeningMode.Movies:
-                    d[Key(Surround, 0)] = 1;   // 7.1 on
-                    d[Key(Surround, 5)] = 0;   // movie mode
-                    d[Key(Surround, 2)] = 0;   // large room
-                    d[Key(Xear, 5)] = 1;       // dynamic bass on
-                    d[Key(Xear, 7)] = 4;
-                    d[Key(Xear, 8)] = 100;
-                    break;
-            }
-            return d;
-        }
-
         public static readonly EffectDef[] Microphone =
         {
             new("AI шумоподавление",

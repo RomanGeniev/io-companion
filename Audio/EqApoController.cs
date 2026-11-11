@@ -9,6 +9,52 @@ using Microsoft.Win32;
 
 namespace GraphiteCompanion.Audio
 {
+    public sealed record MicVoiceSettings(bool Enabled = false, int GainDb = 0, int HighPassHz = 0,
+        int ClarityDb = 0, int TrebleDb = 0)
+    {
+        internal const int ClarityFrequency = 3000;
+        internal const int TrebleFrequency = 6500;
+
+        internal MicVoiceSettings Normalized() => this with
+        {
+            GainDb = Math.Clamp(GainDb, -12, 12),
+            HighPassHz = HighPassHz is 0 or 60 or 80 or 100 or 120 or 160 or 200 ? HighPassHz : 0,
+            ClarityDb = Math.Clamp(ClarityDb, -6, 6),
+            TrebleDb = Math.Clamp(TrebleDb, -6, 6),
+        };
+
+        // Use the same second-order filters as Equalizer APO. The graph also previews bypassed settings.
+        internal double ResponseDb(double frequency, int sampleRate)
+        {
+            double gain = GainDb;
+            double warped = Math.Tan(Math.PI * frequency / sampleRate);
+            if (HighPassHz > 0)
+            {
+                double ratio = Math.Tan(Math.PI * HighPassHz / sampleRate) / warped;
+                gain -= 10 * Math.Log10(1 + Math.Pow(ratio, 4));
+            }
+            if (ClarityDb != 0 && sampleRate > 2 * ClarityFrequency)
+            {
+                double ratio = warped / Math.Tan(Math.PI * ClarityFrequency / sampleRate);
+                double a = Math.Pow(10, ClarityDb / 40.0);
+                double real = 1 - ratio * ratio;
+                gain += 10 * Math.Log10((real * real + Math.Pow(a * ratio, 2)) /
+                                        (real * real + Math.Pow(ratio / a, 2)));
+            }
+            if (TrebleDb != 0 && sampleRate > 2 * TrebleFrequency)
+            {
+                const double shelfSlope = 0.9; // Equalizer APO's default for HS without an explicit slope.
+                double ratio = warped / Math.Tan(Math.PI * TrebleFrequency / sampleRate);
+                double a = Math.Pow(10, TrebleDb / 40.0);
+                double square = ratio * ratio;
+                double imaginarySquare = a * ((a + 1 / a) * (1 / shelfSlope - 1) + 2) * square;
+                gain += TrebleDb / 2.0 + 10 * Math.Log10((Math.Pow(1 - a * square, 2) + imaginarySquare) /
+                                                         (Math.Pow(a - square, 2) + imaginarySquare));
+            }
+            return gain;
+        }
+    }
+
     /// <summary>
     /// Equalizer through Equalizer APO (open source, works with any output device).
     /// IO Companion keeps its settings in its own file "iocompanion.txt" inside Equalizer APO's config
@@ -223,6 +269,37 @@ namespace GraphiteCompanion.Audio
             }
         }
 
+        public static MicVoiceSettings GetMicVoice(string micDeviceId)
+        {
+            if (ConfigDir is not { } dir) return new MicVoiceSettings();
+            lock (Store)
+            {
+                Store.EnsureLoaded(dir);
+                return Store.Voice.TryGetValue(GuidOf(micDeviceId), out var voice) ? voice : new MicVoiceSettings();
+            }
+        }
+
+        public static bool SetMicVoice(string micDeviceId, MicVoiceSettings voice)
+        {
+            if (!IsAttached(micDeviceId) || ConfigDir is not { } dir) return false;
+            lock (Store)
+            {
+                Store.EnsureLoaded(dir);
+                Store.EnsureIncluded(preserveExisting: true);
+                string guid = GuidOf(micDeviceId);
+                Store.Voice.TryGetValue(guid, out var previous);
+                Store.Voice[guid] = voice.Normalized();
+                try { Store.Save(); }
+                catch
+                {
+                    if (previous == null) Store.Voice.Remove(guid);
+                    else Store.Voice[guid] = previous;
+                    throw;
+                }
+            }
+            return true;
+        }
+
         // ---------------- shared config file ----------------
 
         private sealed class OutSection
@@ -237,6 +314,7 @@ namespace GraphiteCompanion.Audio
         {
             public readonly Dictionary<string, OutSection> Out = new(StringComparer.OrdinalIgnoreCase);
             public readonly Dictionary<string, string> Mic = new(StringComparer.OrdinalIgnoreCase); // guid → plugin dll
+            public readonly Dictionary<string, MicVoiceSettings> Voice = new(StringComparer.OrdinalIgnoreCase);
             private string? dir;
 
             private string OwnPath => Path.Combine(dir!, OwnFile);
@@ -244,13 +322,15 @@ namespace GraphiteCompanion.Audio
             public void EnsureLoaded(string configDir)
             {
                 if (dir == configDir) return;
+                string path = Path.Combine(configDir, OwnFile);
+                var lines = File.Exists(path) ? File.ReadAllLines(path) : Array.Empty<string>();
                 dir = configDir;
                 Out.Clear();
                 Mic.Clear();
-                if (!File.Exists(OwnPath)) return;
+                Voice.Clear();
                 // state lines: "# out {guid} enabled=1 bands=0,1,..." / "# mic {guid} plugin=C:\...\x.dll"
                 // (older single-device format "# enabled=" / "# bands=" is dropped - sections start fresh)
-                foreach (var line in File.ReadAllLines(OwnPath))
+                foreach (var line in lines)
                 {
                     var parts = line.Split(' ', 4, StringSplitOptions.RemoveEmptyEntries);
                     if (parts.Length < 3 || parts[0] != "#") continue;
@@ -273,20 +353,36 @@ namespace GraphiteCompanion.Audio
                     {
                         Mic[parts[2]] = parts[3][7..];
                     }
+                    else if (parts[1] == "voice" && parts.Length == 4)
+                    {
+                        var values = parts[3].Split(',');
+                        if (values.Length != 5) continue;
+                        var numbers = values.Select(value => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture,
+                            out int number) ? number : 0).ToArray();
+                        Voice[parts[2]] = new MicVoiceSettings(numbers[0] == 1, numbers[1], numbers[2], numbers[3], numbers[4]).Normalized();
+                    }
                 }
             }
 
             /// <summary>Makes config.txt include our file (the original config is kept as a backup).</summary>
-            public void EnsureIncluded()
+            public void EnsureIncluded(bool preserveExisting = false)
             {
                 string main = Path.Combine(dir!, "config.txt");
                 string include = $"Include: {OwnFile}";
                 if (File.Exists(main))
                 {
                     string text = File.ReadAllText(main);
-                    if (text.Contains(include, StringComparison.OrdinalIgnoreCase)) return;
+                    bool included = preserveExisting
+                        ? text.Split('\n').Any(line => string.Equals(line.Trim(), include, StringComparison.OrdinalIgnoreCase))
+                        : text.Contains(include, StringComparison.OrdinalIgnoreCase);
+                    if (included) return;
                     string backup = Path.Combine(dir!, "config.before-iocompanion.txt");
                     if (!File.Exists(backup)) File.Copy(main, backup);
+                    if (preserveExisting)
+                    {
+                        WriteWithRetry(main, Encoding.UTF8.GetBytes(text + "\r\n\r\n# SoundShot\r\nDevice: all\r\nStage: post-mix capture\r\nChannel: all\r\n" + include + "\r\n"));
+                        return;
+                    }
                 }
                 WriteWithRetry(main, Encoding.UTF8.GetBytes(
                     $"{Marker}: the equalizer is controlled by IO Companion.\r\n" +
@@ -303,6 +399,8 @@ namespace GraphiteCompanion.Audio
                     sb.Append($"# out {guid} enabled={(s.Enabled ? 1 : 0)} bands={string.Join(",", s.Bands.Select(b => b.ToString(ic)))}\r\n");
                 foreach (var (guid, plugin) in Mic)
                     sb.Append($"# mic {guid} plugin={plugin}\r\n");
+                foreach (var (guid, v) in Voice)
+                    sb.Append(FormattableString.Invariant($"# voice {guid} {(v.Enabled ? 1 : 0)},{v.GainDb},{v.HighPassHz},{v.ClarityDb},{v.TrebleDb}\r\n"));
 
                 foreach (var (guid, s) in Out)
                 {
@@ -312,8 +410,18 @@ namespace GraphiteCompanion.Audio
                           .Append(string.Join("; ", Frequencies.Select((f, i) => $"{f.ToString(ic)} {s.Bands[i].ToString(ic)}")))
                           .Append("\r\n");
                 }
-                foreach (var (guid, plugin) in Mic)
-                    sb.Append($"\r\nDevice: {guid}\r\nVSTPlugin: Library \"{plugin}\"\r\n");
+                foreach (string guid in Mic.Keys.Union(Voice.Where(pair => pair.Value.Enabled).Select(pair => pair.Key), StringComparer.OrdinalIgnoreCase))
+                {
+                    sb.Append($"\r\nDevice: {guid}\r\nChannel: all\r\n");
+                    if (Mic.TryGetValue(guid, out var plugin)) sb.Append($"VSTPlugin: Library \"{plugin}\"\r\n");
+                    if (Voice.TryGetValue(guid, out var v) && v.Enabled)
+                    {
+                        if (v.HighPassHz != 0) sb.Append(FormattableString.Invariant($"Filter: ON HP Fc {v.HighPassHz} Hz\r\n"));
+                        if (v.ClarityDb != 0) sb.Append(FormattableString.Invariant($"Filter: ON PK Fc {MicVoiceSettings.ClarityFrequency} Hz Gain {v.ClarityDb} dB Q 1\r\n"));
+                        if (v.TrebleDb != 0) sb.Append(FormattableString.Invariant($"If: sampleRate > {2 * MicVoiceSettings.TrebleFrequency}\r\nFilter: ON HS Fc {MicVoiceSettings.TrebleFrequency} Hz Gain {v.TrebleDb} dB\r\nEndIf:\r\n"));
+                        if (v.GainDb != 0) sb.Append(FormattableString.Invariant($"Preamp: {v.GainDb} dB\r\n"));
+                    }
+                }
                 // anything Equalizer APO is attached to but we don't manage: leave untouched (no commands)
                 WriteWithRetry(OwnPath, Encoding.UTF8.GetBytes(sb.ToString()));
             }

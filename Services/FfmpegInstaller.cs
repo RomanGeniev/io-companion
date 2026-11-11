@@ -64,22 +64,37 @@ namespace GraphiteCompanion.Services
         }
 
         /// <summary>Runs ffmpeg with arguments and waits; returns the exit code (used for quick capability tests).</summary>
-        public static async Task<int> RunAsync(string args, int timeoutMs = 15000)
+        public static async Task<int> RunAsync(string args, int timeoutMs = 15000, string? logName = null)
         {
             var psi = new ProcessStartInfo(ExePath, "-hide_banner -loglevel error " + args)
             {
                 CreateNoWindow = true, UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true,
             };
             using var p = Process.Start(psi)!;
-            _ = p.StandardError.ReadToEndAsync();
-            _ = p.StandardOutput.ReadToEndAsync();
+            var errors = p.StandardError.ReadToEndAsync();
+            var output = p.StandardOutput.ReadToEndAsync();
             var exited = p.WaitForExitAsync();
+            bool timedOut = false;
             if (await Task.WhenAny(exited, Task.Delay(timeoutMs)) != exited)
             {
+                timedOut = true;
                 try { p.Kill(true); } catch { }
-                return -1;
             }
-            return p.ExitCode;
+            await exited;
+            string stderr = await errors;
+            await output;
+            int code = timedOut ? -1 : p.ExitCode;
+            if (logName != null && (code != 0 || stderr.Length > 0))
+            {
+                try
+                {
+                    Directory.CreateDirectory(SettingsStore.Folder);
+                    File.AppendAllText(Path.Combine(SettingsStore.Folder, logName),
+                        $"[{DateTime.Now:O}] Exit code: {code}{(timedOut ? " (timeout)" : "")}\n{stderr}\n");
+                }
+                catch { }
+            }
+            return code;
         }
     }
 }

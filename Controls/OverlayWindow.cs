@@ -1,20 +1,26 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
+using System.Windows.Interop;
+using System.Windows.Threading;
 using GraphiteCompanion.Audio;
 using GraphiteCompanion.Models;
+using GraphiteCompanion.Services;
+using DrawingPoint = System.Drawing.Point;
+using Forms = System.Windows.Forms;
 
 namespace GraphiteCompanion.Controls
 {
     /// <summary>
-    /// Panel opened by Win+G over any window: dims the screen and shows two columns - sound on the left
+    /// Panel opened by Win+G over desktop-composed games: shows two columns - sound on the left
     /// (mode, equalizer, volume, microphone, output device), recording and per-program volume on the right.
-    /// Esc, the hotkey or a click outside closes it. Works over windowed / borderless games (not exclusive fullscreen).
+    /// Drag the header to move it; Esc, the hotkey or a click outside closes it.
     /// </summary>
     public sealed class OverlayWindow : Window
     {
@@ -34,7 +40,21 @@ namespace GraphiteCompanion.Controls
         private readonly Button micButton = new();
         private readonly Button compare = new();
         private readonly TextBlock footer = new() { FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 16, 0, 0) };
-        private readonly Border panel;
+        private readonly Border dragArea;
+        private readonly NowPlayingCard nowPlaying;
+        private IntPtr hwnd;
+        private System.Drawing.Rectangle screenBounds;
+        private int fullscreenState;
+        private DrawingPoint? dragOffset;
+        private DrawingPoint lastDragPointer;
+        private DrawingPoint pendingDragPointer;
+        private bool dragMovePosted, endingDrag;
+        private int dragReleaseMessage;
+        private const int DragMoveMessage = 0x8000 + 42;
+        internal bool IsDragging => dragOffset != null;
+        private bool movedByUser;
+        private MouseHookProc? mouseHookProc;
+        private IntPtr mouseHook;
         private bool loading;
         private readonly WrapPanel customPanel = new();
         private readonly Border customBox = new() { CornerRadius = new CornerRadius(12), Padding = new Thickness(6, 6, 0, 0) };
@@ -48,34 +68,92 @@ namespace GraphiteCompanion.Controls
         private static extern int GetWindowLong(IntPtr hWnd, int index);
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern int SetWindowLong(IntPtr hWnd, int index, int value);
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hWnd);
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct NativeRect { public int Left, Top, Right, Bottom; }
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool GetWindowRect(IntPtr hWnd, out NativeRect rect);
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hWnd, int attribute, ref int value, int size);
+        [System.Runtime.InteropServices.DllImport("shell32.dll")]
+        private static extern int SHQueryUserNotificationState(out int state);
+        [DllImport("user32.dll")]
+        private static extern bool PostMessageW(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+        [DllImport("user32.dll")]
+        private static extern IntPtr WindowFromPhysicalPoint(DrawingPoint point);
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetAncestor(IntPtr window, uint flags);
+        private delegate IntPtr MouseHookProc(int code, IntPtr message, IntPtr data);
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SetWindowsHookExW(int id, MouseHookProc proc, IntPtr module, uint thread);
+        [DllImport("user32.dll")]
+        private static extern bool UnhookWindowsHookEx(IntPtr hook);
+        [DllImport("user32.dll")]
+        private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr GetModuleHandle(string? name);
 
         public OverlayWindow(MainWindow main)
         {
             this.main = main;
+            HelpTips.Set(eqSwitch, "Включает или отключает эквалайзер выбранного устройства. Настройки полос сохраняются; остальные эффекты управляются отдельно.");
+            HelpTips.Set(volume, "Общая громкость выбранного устройства вывода. Изменение применяется сразу и также отражается в Windows.");
+            HelpTips.Set(compare, "Удерживайте, чтобы временно услышать звук без эквалайзера и эффектов. Отпустите, чтобы вернуть обработку.");
+            HelpTips.Set(replayButton, "Сохранить уже накопленные последние минуты. Длина ролика зависит от настройки и того, сколько времени успел работать буфер.");
+            HelpTips.Set(recordButton, "Начать запись с текущего момента или остановить и сохранить начатую запись. Это не сохранение прошлого из буфера.");
+            HelpTips.Set(shotButton, "Сохранить один кадр выбранного монитора как PNG в папку записей.");
             WindowStyle = WindowStyle.None;
-            AllowsTransparency = true;
+            AllowsTransparency = false;
             ResizeMode = ResizeMode.NoResize;
             Topmost = true;
             ShowInTaskbar = false;
             ShowActivated = false;          // never steal the foreground: a fullscreen game stays up
-            Background = new SolidColorBrush(Color.FromArgb(0x99, 0, 0, 0));
+            // Use a normal redirected HWND. A transparent, screen-sized layered window can
+            // keep receiving mouse input while its pixels are absent above a fullscreen swap chain.
+            SetResourceReference(BackgroundProperty, "CardBrush");
+            SizeToContent = SizeToContent.Height;
+            UseLayoutRounding = true;
             FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI");
             FontSize = 13;
             SetResourceReference(ForegroundProperty, "TextBrush");
+            SourceInitialized += (_, _) =>
+            {
+                hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                // Apply before the first Show; even the first mouse click must leave the game active.
+                SetWindowLong(hwnd, -20, GetWindowLong(hwnd, -20) | 0x08000000); // WS_EX_NOACTIVATE
+                var source = HwndSource.FromHwnd(hwnd);
+                source.CompositionTarget.RenderMode = RenderMode.SoftwareOnly;
+                source.AddHook(WindowProc);
+                int roundCorners = 2;
+                DwmSetWindowAttribute(hwnd, 33, ref roundCorners, sizeof(int));
+            };
+            ContentRendered += (_, _) => { if (!movedByUser) PositionOverlay(); LogPresentation("rendered"); };
 
             // ================= header: what is playing now + keyboard / close
             subtitle.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
             var titles = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             titles.Children.Add(title);
             titles.Children.Add(subtitle);
-
-            var keys = new Button { ToolTip = "Изменить горячие клавиши", Content = Glyph("", 15), Padding = new Thickness(12, 8, 12, 8) };
+            var openApp = new Button
+            {
+                ToolTip = "Открыть SoundShot", Content = Glyph("\uE8A7", 15),
+                Padding = new Thickness(10, 8, 10, 8), Margin = new Thickness(0, 0, 4, 0),
+                Cursor = Cursors.Hand,
+            };
+            openApp.SetResourceReference(StyleProperty, "GhostButton");
+            System.Windows.Automation.AutomationProperties.SetName(openApp, "Открыть SoundShot");
+            openApp.Click += (_, _) => { Close(); main.ShowFromTray(); };
+            var keys = new Button { ToolTip = "Изменить горячие клавиши", Content = Glyph("", 15),
+                Padding = new Thickness(12, 8, 12, 8), Cursor = Cursors.Hand };
             keys.SetResourceReference(StyleProperty, "GhostButton");
             keys.Click += (_, _) => { Close(); main.OpenHotkeysWindow(); };
-            var close = new Button { ToolTip = "Закрыть (Esc)", Content = Glyph("", 15), Padding = new Thickness(12, 8, 12, 8), Margin = new Thickness(8, 0, 0, 0) };
+            var close = new Button { ToolTip = "Закрыть (Esc)", Content = Glyph("", 15), Padding = new Thickness(12, 8, 12, 8),
+                Margin = new Thickness(8, 0, 0, 0), Cursor = Cursors.Hand };
             close.SetResourceReference(StyleProperty, "GhostButton");
             close.Click += (_, _) => Close();
             var headerButtons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            headerButtons.Children.Add(openApp);
             headerButtons.Children.Add(keys);
             headerButtons.Children.Add(close);
             var header = new Grid();
@@ -84,6 +162,33 @@ namespace GraphiteCompanion.Controls
             header.Children.Add(titles);
             Grid.SetColumn(headerButtons, 1);
             header.Children.Add(headerButtons);
+            dragArea = new Border
+            {
+                Child = header, Background = Brushes.Transparent, Cursor = Cursors.SizeAll,
+                Padding = new Thickness(30, 24, 30, 0), ToolTip = "Потяните, чтобы переместить оверлей",
+            };
+            dragArea.PreviewMouseLeftButtonDown += (_, e) =>
+            {
+                if (openApp.IsMouseOver || keys.IsMouseOver || close.IsMouseOver) return;
+                e.Handled = StartDragging(Forms.Cursor.Position);
+            };
+            dragArea.PreviewMouseLeftButtonUp += (_, e) =>
+            {
+                if (dragOffset == null) return;
+                QueueDragMove(Forms.Cursor.Position, released: true);
+                e.Handled = true;
+            };
+            dragArea.PreviewMouseMove += (_, e) =>
+            {
+                if (dragOffset == null) return;
+                QueueDragMove(Forms.Cursor.Position);
+                e.Handled = true;
+            };
+            dragArea.LostMouseCapture += (_, _) =>
+            {
+                if (dragOffset != null) MoveToPointer(endingDrag ? pendingDragPointer : Forms.Cursor.Position);
+                StopDragging();
+            };
 
             // ================= left column: sound
             // ---- mode
@@ -213,35 +318,43 @@ namespace GraphiteCompanion.Controls
 
             footer.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
 
+            var body = new StackPanel { Margin = new Thickness(30, 0, 30, 18) };
+            nowPlaying = new NowPlayingCard(main);
+            body.Children.Add(nowPlaying);
+            body.Children.Add(columns);
+            body.Children.Add(footer);
             var content2 = new StackPanel();
-            content2.Children.Add(header);
-            content2.Children.Add(new NowPlayingCard(main));
-            content2.Children.Add(columns);
-            content2.Children.Add(footer);
+            content2.Children.Add(dragArea);
+            content2.Children.Add(body);
 
-            panel = new Border
+            var panel = new Border
             {
-                Width = 960, CornerRadius = new CornerRadius(20), Padding = new Thickness(30, 24, 30, 18), BorderThickness = new Thickness(1),
-                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
-                Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 40, ShadowDepth = 0, Opacity = 0.6 },
+                CornerRadius = new CornerRadius(0), BorderThickness = new Thickness(1),
+                HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Top,
                 Child = content2,
-                RenderTransform = new ScaleTransform(1, 1),
-                RenderTransformOrigin = new Point(0.5, 0.5),
             };
             panel.SetResourceReference(Border.BackgroundProperty, "CardBrush");
             panel.SetResourceReference(Border.BorderBrushProperty, "CardBorderBrush");
-            panel.MouseLeftButtonDown += (_, e) => { outputPopup.IsOpen = false; e.Handled = true; }; // clicks inside don't close
-            Content = new Grid { Children = { panel } };
-
-            MouseLeftButtonDown += (_, _) => Close();             // click on the dimmed area
-            KeyDown += (_, e) =>
+            panel.MouseLeftButtonDown += (_, _) => outputPopup.IsOpen = false;
+            Content = new ScrollViewer { Content = panel, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            PreviewKeyDown += (_, e) =>
             {
                 if (e.Key != Key.Escape) return;
-                if (outputPopup.IsOpen) outputPopup.IsOpen = false; else Close();
+                e.Handled = true;
+                Close();
             };
-            // the window is never activated (so a fullscreen game stays up), so Deactivated never fires;
-            // it closes on the hotkey, Esc when focused, or a click on the dimmed area
-            Closed += (_, _) => main.CompareOff();
+            // The global keyboard hook handles Escape while the game keeps keyboard focus.
+            Closed += (_, _) =>
+            {
+                StopDragging();
+                nowPlaying.Dispose();
+                if (mouseHook != IntPtr.Zero) UnhookWindowsHookEx(mouseHook);
+                mouseHook = IntPtr.Zero;
+                mouseHookProc = null;
+                outputPopup.IsOpen = false;
+                main.CompareOff();
+            };
         }
 
         private TextBlock Section(string text, bool first = false)
@@ -269,39 +382,151 @@ namespace GraphiteCompanion.Controls
             return sp;
         }
 
-        /// <summary>Shows the overlay on the monitor under the mouse cursor, over a fullscreen game,
-        /// without taking the foreground: the game never minimizes. Clicks still reach the panel
-        /// (WM_MOUSEACTIVATE → MA_NOACTIVATE); Esc no longer applies — close with the hotkey or a click outside.</summary>
+        /// <summary>Shows a non-layered panel on the monitor under the mouse cursor,
+        /// without taking the foreground. Clicks still reach the panel
+        /// (WM_MOUSEACTIVATE → MA_NOACTIVATE); the global keyboard hook handles Escape.</summary>
         public void Open()
         {
+            SHQueryUserNotificationState(out fullscreenState);
             Refresh();
-            Opacity = 0;
-            // Put a small window on the monitor under the cursor, then let Windows maximize it: a maximized
-            // borderless window covers exactly that monitor, whatever the display scaling (150% etc.) is.
             var screen = System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Cursor.Position);
+            screenBounds = screen.Bounds;
             WindowStartupLocation = WindowStartupLocation.Manual;
-            Width = Height = 200;
+            // Create the HWND on the target monitor before measuring the panel at that monitor's DPI.
+            new WindowInteropHelper(this).EnsureHandle();
+            SetWindowPos(hwnd, new IntPtr(-1), screenBounds.Left + 16, screenBounds.Top + 16, 200, 200, 0x0010);
+            double scale = Math.Max(96, GetDpiForWindow(hwnd)) / 96.0;
+            Width = Math.Min(960, Math.Max(1, (screenBounds.Width - 32) / scale));
+            MaxHeight = Math.Max(1, (screenBounds.Height - 32) / scale);
+            Opacity = 1;
             Show();
-            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-            // no-activate: clicks land in the panel without deactivating the game
-            SetWindowLong(hwnd, -20, GetWindowLong(hwnd, -20) | 0x08000000);   // WS_EX_NOACTIVATE
-            var source = System.Windows.Interop.HwndSource.FromHwnd(hwnd);
-            source.AddHook((IntPtr h, int msg, IntPtr w, IntPtr l, ref bool handled) =>
+            UpdateLayout();
+            PositionOverlay();
+            mouseHookProc = OnMouseHook;
+            mouseHook = SetWindowsHookExW(14 /* WH_MOUSE_LL */, mouseHookProc, GetModuleHandle(null), 0);
+            if (mouseHook == IntPtr.Zero)
+                SettingsStore.LogError(new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "Overlay mouse listener"));
+            LogPresentation("opened");
+        }
+
+        private bool StartDragging(DrawingPoint pointer)
+        {
+            if (!IsVisible || !GetWindowRect(hwnd, out var rect)) return false;
+            dragOffset = new DrawingPoint(pointer.X - rect.Left, pointer.Y - rect.Top);
+            lastDragPointer = pointer;
+            pendingDragPointer = pointer;
+            dragReleaseMessage = Forms.SystemInformation.MouseButtonsSwapped ? 0x0205 : 0x0202;
+            endingDrag = false;
+            movedByUser = true;
+            outputPopup.IsOpen = false;
+            nowPlaying.SetPanelMoving(true);
+            if (!dragArea.CaptureMouse() && mouseHook == IntPtr.Zero)
             {
-                if (msg == 0x0021 && w == hwnd && l != IntPtr.Zero)            // WM_MOUSEACTIVATE
+                StopDragging();
+                return false;
+            }
+            return true;
+        }
+
+        private void QueueDragMove(DrawingPoint pointer, bool released = false)
+        {
+            if (dragOffset == null || endingDrag) return;
+            pendingDragPointer = pointer;
+            endingDrag = released;
+            if (dragMovePosted) return;
+            // One native message consumes the latest pointer position. Moving the HWND
+            // never waits for the next WPF render, even with software rendering.
+            dragMovePosted = PostMessageW(hwnd, DragMoveMessage, IntPtr.Zero, IntPtr.Zero);
+            if (!dragMovePosted)
+            {
+                MoveToPointer(pointer);
+                if (endingDrag) StopDragging();
+            }
+        }
+
+        private void MoveToPointer(DrawingPoint pointer)
+        {
+            if (dragOffset is not { } offset || !IsVisible || pointer == lastDragPointer) return;
+            if (SetWindowPos(hwnd, IntPtr.Zero, pointer.X - offset.X, pointer.Y - offset.Y, 0, 0,
+                0x0001 | 0x0004 | 0x0010 | 0x0400)) // NOSIZE | NOZORDER | NOACTIVATE | NOSENDCHANGING
+                lastDragPointer = pointer;
+        }
+
+        private void StopDragging()
+        {
+            if (dragOffset == null) return;
+            dragOffset = null;
+            dragMovePosted = endingDrag = false;
+            if (dragArea.IsMouseCaptured) dragArea.ReleaseMouseCapture();
+            nowPlaying.SetPanelMoving(false);
+        }
+
+        private IntPtr OnMouseHook(int code, IntPtr message, IntPtr data)
+        {
+            if (code == 0)
+            {
+                // Read screen pixels directly so drag speed is independent of monitor DPI.
+                int kind = message.ToInt32();
+                if (dragOffset != null && (kind == 0x0200 || kind == dragReleaseMessage))
+                    QueueDragMove(new DrawingPoint(Marshal.ReadInt32(data), Marshal.ReadInt32(data, 4)),
+                        released: kind == dragReleaseMessage);
+                else if (kind is 0x0201 or 0x0204 or 0x0207 or 0x020B)
+                    OnDesktopPress(new DrawingPoint(Marshal.ReadInt32(data), Marshal.ReadInt32(data, 4)));
+            }
+            return CallNextHookEx(mouseHook, code, message, data);
+        }
+
+        private void OnDesktopPress(DrawingPoint pointer)
+        {
+            if (!IsVisible || dragOffset != null) return;
+            IntPtr hit = GetAncestor(WindowFromPhysicalPoint(pointer), 2 /* GA_ROOT */);
+            if (hit == hwnd) return;
+            if (outputPopup.IsOpen && PresentationSource.FromVisual(outputItems) is HwndSource popup && hit == popup.Handle) return;
+            // Close after returning from the hook so the input queue is never blocked by teardown.
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => { if (IsVisible && dragOffset == null) Close(); }));
+        }
+
+        private void LogPresentation(string stage)
+        {
+            try
+            {
+                Directory.CreateDirectory(SettingsStore.Folder);
+                File.AppendAllText(Path.Combine(SettingsStore.Folder, "overlay.log"),
+                    $"[{DateTime.Now:O}] {stage} shellState={fullscreenState} " +
+                    $"exclusiveD3D={fullscreenState == 3} exStyle=0x{GetWindowLong(hwnd, -20):X8} " +
+                    $"size={ActualWidth:0}x{ActualHeight:0} opacity={Opacity:0.0}\n");
+            }
+            catch { }
+        }
+
+        private IntPtr WindowProc(IntPtr h, int msg, IntPtr w, IntPtr l, ref bool handled)
+        {
+            if (msg == DragMoveMessage)
+            {
+                handled = true;
+                dragMovePosted = false;
+                if (dragOffset != null)
                 {
-                    handled = true;
-                    return (IntPtr)3;                                        // MA_NOACTIVATE: eat nothing, activate nothing
+                    MoveToPointer(pendingDragPointer);
+                    if (endingDrag) StopDragging();
                 }
                 return IntPtr.Zero;
-            });
-            SetWindowPos(hwnd, IntPtr.Zero, screen.Bounds.Left + 50, screen.Bounds.Top + 50, 200, 200, 0x0004 | 0x0010);
-            WindowState = WindowState.Maximized;
-            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-            BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(140)));
-            var st = (ScaleTransform)panel.RenderTransform;
-            st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.96, 1, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
-            st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.96, 1, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
+            }
+            if (msg == 0x0021) // WM_MOUSEACTIVATE
+            {
+                handled = true;
+                return new IntPtr(3); // MA_NOACTIVATE
+            }
+            return IntPtr.Zero;
+        }
+
+        private void PositionOverlay()
+        {
+            if (!IsVisible || hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out var rect)) return;
+            int width = rect.Right - rect.Left, height = rect.Bottom - rect.Top;
+            SetWindowPos(hwnd, new IntPtr(-1), screenBounds.Left + (screenBounds.Width - width) / 2,
+                screenBounds.Top + (screenBounds.Height - height) / 2, 0, 0,
+                0x0001 | 0x0010 | 0x0040); // NOSIZE | NOACTIVATE | SHOWWINDOW
         }
 
         public void Refresh()
@@ -333,7 +558,7 @@ namespace GraphiteCompanion.Controls
             replayButton.IsEnabled = main.ReplayActive;
             recordButton.Content = Labeled(main.RecordingActive ? "" : "", main.RecordingActive ? "Остановить" : "Запись", main.HotkeyLabel("record"), vertical: true);
             shotButton.Content = Labeled("", "Скриншот", main.HotkeyLabel("shot"), vertical: true);
-            footer.Text = $"{main.OverlayKeyText()} или клик по затемнению — закрыть  ·  значок клавиатуры вверху — изменить горячие клавиши";
+            footer.Text = $"Esc, {main.OverlayKeyText()} или клик снаружи — закрыть";
             RefreshCustom();
             loading = false;
             RefreshOutputs();

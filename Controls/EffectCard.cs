@@ -30,7 +30,7 @@ namespace GraphiteCompanion.Controls
             Definition = def;
             Style = (Style)Res("Card");
             Margin = new Thickness(6);
-            Padding = new Thickness(18, 16, 18, 16);
+            Padding = new Thickness(12);
 
             var root = new StackPanel();
             Child = root;
@@ -43,28 +43,25 @@ namespace GraphiteCompanion.Controls
 
             var iconBox = new Border
             {
-                Width = 38, Height = 38, CornerRadius = new CornerRadius(10),
+                Width = 28, Height = 28, CornerRadius = new CornerRadius(10),
                 Background = (Brush)Res("InsetBrush"), VerticalAlignment = VerticalAlignment.Top,
                 Child = new TextBlock
                 {
-                    Text = def.Icon, FontFamily = (FontFamily)Res("IconFont"), FontSize = 17,
+                    Text = def.Icon, FontFamily = (FontFamily)Res("IconFont"), FontSize = 15,
                     Foreground = (Brush)Res("AccentBrush"),
                     HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
                 },
             };
             header.Children.Add(iconBox);
 
-            var titles = new StackPanel { Margin = new Thickness(12, 0, 12, 0) };
-            titles.Children.Add(new TextBlock { Text = def.Title, FontSize = 15, FontWeight = FontWeights.SemiBold });
-            titles.Children.Add(new TextBlock
-            {
-                Text = def.Description, FontSize = 12, Foreground = (Brush)Res("SubTextBrush"),
-                TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0),
-            });
+            var titles = new StackPanel { Margin = new Thickness(8, 0, 8, 0) };
+            titles.Children.Add(new TextBlock { Text = def.Title, FontSize = 14, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+            HelpTips.Set(titles, def.Description + " Включите эффект и сравните звук на знакомой записи.");
             Grid.SetColumn(titles, 1);
             header.Children.Add(titles);
 
             enableSwitch = new CheckBox { Style = (Style)Res("Switch"), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 2, 0, 0) };
+            HelpTips.Set(enableSwitch, def.Title + ". " + def.Description + " Включите и выключите на одном и том же фрагменте, чтобы сравнить результат. Положение регуляторов сохраняется; при выключенном эффекте они не влияют на звук.");
             void OnToggle(object s, RoutedEventArgs e)
             {
                 UpdateLook();
@@ -86,7 +83,18 @@ namespace GraphiteCompanion.Controls
 
         private void AddParam(EffectParam p)
         {
-            var labelRow = new Grid { Margin = new Thickness(0, 12, 0, 6) };
+            string explanation = p.Label switch
+            {
+                "Частота среза" => "Задаёт границу частот, с которыми работает басовый эффект. Меняйте понемногу и проверяйте, не появляется ли гул.",
+                "Подавление шума" => "Меняет степень ослабления фонового шума. Сильная обработка может изменить и полезный звук — сравните с выключенным эффектом.",
+                "Размер комнаты" => "Меняет ощущение пространства у виртуального объёмного звука. Выберите вариант, в котором направление звуков воспринимается понятнее.",
+                "Уровень баса" => "Интенсивность дополнительного баса. Большее значение сильнее подчёркивает низкие звуки; уменьшите его, если бас заглушает речь.",
+                "Голос" => "Вариант изменения голоса. Для проверки включите прослушивание микрофона в наушниках.",
+                "Режим" => "Вариант работы этого эффекта. Выберите подходящий тип материала и сравните на знакомом фрагменте.",
+                _ => "Интенсивность этого эффекта. Меняйте небольшими шагами и сравнивайте результат на одном и том же фрагменте.",
+            };
+            explanation = Definition.Title + ": " + p.Label + ". " + explanation + " Применяется, только когда эффект включён.";
+            var labelRow = new Grid { Margin = new Thickness(0, 8, 0, 4) };
             labelRow.Children.Add(new TextBlock { Text = p.Label, FontSize = 12, Foreground = (Brush)Res("SubTextBrush") });
             body.Children.Add(labelRow);
 
@@ -97,6 +105,7 @@ namespace GraphiteCompanion.Controls
                 var buttons = p.Options.Select(o =>
                 {
                     var rb = new RadioButton { Style = (Style)Res("Segment"), Content = o.Label, Tag = o.Value, GroupName = group };
+                    HelpTips.Set(rb, o.Label + ". " + explanation);
                     rb.Checked += (_, _) => { if (!loading) Changed?.Invoke(Definition.Format, p.Pid, o.Value); };
                     grid.Children.Add(rb);
                     return rb;
@@ -121,6 +130,7 @@ namespace GraphiteCompanion.Controls
                 SmallChange = p.Step, LargeChange = p.Step,
                 TickFrequency = p.Step, IsSnapToTickEnabled = true,
             };
+            HelpTips.Set(slider, explanation);
             slider.ValueChanged += (_, e) =>
             {
                 int v = (int)Math.Round(e.NewValue);

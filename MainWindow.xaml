@@ -1,870 +1,1000 @@
-﻿<Window x:Class="GraphiteCompanion.MainWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="SoundShot"
-        Width="1160" Height="800" MinWidth="1000" MinHeight="680"
-        WindowStartupLocation="CenterScreen"
-        Background="{DynamicResource BgBrush}"
-        Foreground="{DynamicResource TextBrush}"
-        FontFamily="Segoe UI Variable Text, Segoe UI"
-        FontSize="13">
-
-    <Grid Margin="20">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="320"/>
-            <ColumnDefinition Width="20"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
-
-        <!-- ================= SIDEBAR ================= -->
-        <ScrollViewer x:Name="SidebarScroll" Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+<Window x:Class="GraphiteCompanion.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="SoundShot" Width="1180" Height="820" MinWidth="1060" MinHeight="720" WindowStartupLocation="CenterScreen" Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}" FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13">
+  <Window.Resources>
+    <Style TargetType="Expander">
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Expander">
             <StackPanel>
-
-                <!-- Brand -->
-                <StackPanel Orientation="Horizontal" Margin="4,2,0,18">
-                    <Border x:Name="BrandLogo" Width="40" Height="40" CornerRadius="11" Background="{DynamicResource AccentGradient}">
-                        <TextBlock Text="&#xE7F6;" FontFamily="{StaticResource IconFont}" FontSize="19" Foreground="White"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="SoundShot" FontSize="17" FontWeight="SemiBold"/>
-                        <TextBlock x:Name="BrandSubtitle" Text="Наушники IO" FontSize="11" Foreground="{DynamicResource SubTextBrush}"
-                                   TextTrimming="CharacterEllipsis" MaxWidth="230"/>
-                    </StackPanel>
-                </StackPanel>
-
-                <!-- Update available -->
-                <Border x:Name="UpdateCard" Visibility="Collapsed" Background="{DynamicResource AccentGradient}" CornerRadius="14" Padding="16,12" Margin="0,0,0,12">
-                    <Grid>
+              <ToggleButton IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}}" Content="{TemplateBinding Header}" Foreground="{TemplateBinding Foreground}" Cursor="Hand">
+                <ToggleButton.Template>
+                  <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="HeaderSurface" Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="14,12" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1">
+                      <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
+                          <ColumnDefinition />
+                          <ColumnDefinition Width="24" />
                         </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock x:Name="UpdateTitle" Foreground="White" FontWeight="SemiBold" Text="Доступна новая версия"/>
-                            <TextBlock x:Name="UpdateNotes" Foreground="#DDFFFFFF" FontSize="12" TextWrapping="Wrap" MaxHeight="34" TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
-                        <Button x:Name="UpdateButton" Grid.Column="1" Margin="10,0,0,0" Click="Update_Click" Style="{StaticResource GhostButton}">
-                            <TextBlock x:Name="UpdateButtonText" Text="Обновить"/>
-                        </Button>
-                    </Grid>
-                </Border>
-
-                <!-- Device -->
-                <Border Style="{StaticResource Card}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource CardTitle}" Text="УСТРОЙСТВО"/>
-                        <ComboBox x:Name="DeviceCombo" SelectionChanged="DeviceCombo_SelectionChanged" HorizontalAlignment="Stretch"/>
-                        <Grid Margin="2,10,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Ellipse x:Name="StatusDot" Width="8" Height="8" Fill="{DynamicResource SubTextBrush}" VerticalAlignment="Top" Margin="0,5,0,0"/>
-                            <TextBlock x:Name="StatusText" Grid.Column="1" Margin="8,0,0,0" Text="Поиск наушников…"
-                                       Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"/>
-                        </Grid>
-                        <TextBlock x:Name="BatteryText" Text="" Visibility="Collapsed" Margin="2,6,0,0"
-                                   Foreground="{DynamicResource SubTextBrush}" FontWeight="SemiBold"
-                                   ToolTip="Заряд батареи беспроводного устройства. Показывается, только если устройство отдаёт его по стандарту (HID Battery Page или BLE)."/>
-                        <Grid Margin="0,16,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <ToggleButton x:Name="MuteButton" Style="{StaticResource IconToggle}" Click="MuteButton_Click" ToolTip="Выключить звук">
-                                <TextBlock x:Name="MuteIcon" Text="&#xE767;" FontFamily="{StaticResource IconFont}" FontSize="15"/>
-                            </ToggleButton>
-                            <Slider x:Name="VolumeSlider" Grid.Column="1" Style="{StaticResource VolumeSlider}" Margin="10,0"
-                                    VerticalAlignment="Center" ValueChanged="VolumeSlider_ValueChanged"/>
-                            <TextBlock x:Name="VolumeText" Grid.Column="2" Text="—" Width="40" TextAlignment="Right"
-                                       VerticalAlignment="Center" FontWeight="SemiBold"/>
-                        </Grid>
-                    </StackPanel>
-                </Border>
-
-                <!-- Earpads -->
-                <Border Style="{StaticResource Card}">
-                    <StackPanel>
-                        <TextBlock x:Name="PadCardTitle" Style="{StaticResource CardTitle}" Text="АМБУШЮРЫ"/>
-                        <!-- what this device is: remembered per device -->
-                        <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4" Margin="0,0,0,10">
-                            <UniformGrid Columns="2">
-                                <RadioButton x:Name="KindHeadphones" GroupName="Kind" Style="{StaticResource Segment}" Tag="Headphones" Checked="Kind_Checked">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="&#xE7F6;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                        <TextBlock Text="Наушники" Margin="6,0,0,0"/>
-                                    </StackPanel>
-                                </RadioButton>
-                                <RadioButton x:Name="KindSpeakers" GroupName="Kind" Style="{StaticResource Segment}" Tag="Speakers" Checked="Kind_Checked">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="&#xE7F5;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                        <TextBlock Text="Колонки" Margin="6,0,0,0"/>
-                                    </StackPanel>
-                                </RadioButton>
-                            </UniformGrid>
-                        </Border>
-                        <Border x:Name="PadSelector" Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4">
-                            <UniformGrid Columns="3">
-                                <RadioButton x:Name="PadFabric" GroupName="Pad" Style="{StaticResource Segment}" Content="Ткань" Tag="Fabric" Checked="Pad_Checked"/>
-                                <RadioButton x:Name="PadLeatherette" GroupName="Pad" Style="{StaticResource Segment}" Content="Кожзам" Tag="Leatherette" Checked="Pad_Checked"/>
-                                <RadioButton x:Name="PadVelour" GroupName="Pad" Style="{StaticResource Segment}" Content="Велюр" Tag="Velour" Checked="Pad_Checked"/>
-                            </UniformGrid>
-                        </Border>
-                        <TextBlock x:Name="PadHint" Margin="2,10,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Custom presets -->
-                <Border Style="{StaticResource Card}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource CardTitle}" Text="МОИ ПРЕСЕТЫ"/>
-                        <ListBox x:Name="CustomList" MaxHeight="170" SelectionChanged="CustomList_SelectionChanged"
-                                 Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource PresetItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
-                        <TextBlock x:Name="CustomEmpty" Text="Пока пусто. Настройте эквалайзер и сохраните результат здесь."
-                                   FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="2,0,0,4"/>
-                        <TextBlock Text="Название" FontSize="12" Foreground="{DynamicResource SubTextBrush}" Margin="2,10,0,4"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="CustomName" MaxLength="40" KeyDown="CustomName_KeyDown" VerticalContentAlignment="Center"/>
-                            <Button Grid.Column="1" Style="{StaticResource AccentButton}" Margin="8,0,0,0" Click="SaveCustom_Click"
-                                    ToolTip="Сохранить текущие настройки эквалайзера">
-                                <TextBlock Text="&#xE74E;" FontFamily="{StaticResource IconFont}" FontSize="14"/>
-                            </Button>
-                        </Grid>
-                        <Button x:Name="DeleteCustomButton" Style="{StaticResource GhostButton}" Margin="0,8,0,0"
-                                HorizontalAlignment="Stretch" Click="DeleteCustom_Click" IsEnabled="False">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE74D;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                <TextBlock Text="Удалить выбранный" Margin="8,0,0,0"/>
-                            </StackPanel>
-                        </Button>
-                        <Grid Margin="0,8,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="8"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Button Style="{StaticResource GhostButton}" Click="ImportPresets_Click" ToolTip="Загрузить пресеты из файла">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE8B5;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Импорт" Margin="8,0,0,0"/>
-                                </StackPanel>
-                            </Button>
-                            <Button Grid.Column="2" Style="{StaticResource GhostButton}" Click="ExportPresets_Click" ToolTip="Сохранить все свои пресеты в файл">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xEDE1;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Экспорт" Margin="8,0,0,0"/>
-                                </StackPanel>
-                            </Button>
-                        </Grid>
-                        <Grid Margin="0,8,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="8"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Button Style="{StaticResource GhostButton}" Click="ShareCode_Click" ToolTip="Получить короткий код текущего звука, чтобы отправить другу">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE72D;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Поделиться" Margin="8,0,0,0"/>
-                                </StackPanel>
-                            </Button>
-                            <Button Grid.Column="2" Style="{StaticResource GhostButton}" Click="EnterCode_Click" ToolTip="Добавить пресет по коду от друга">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE8AC;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Ввести код" Margin="8,0,0,0"/>
-                                </StackPanel>
-                            </Button>
-                        </Grid>
-                        <Button Style="{StaticResource AccentButton}" Margin="0,8,0,0" HorizontalAlignment="Stretch" Click="AutoEq_Click"
-                                ToolTip="Пресет, выравнивающий звук вашей модели наушников (открытая база AutoEq, ~5000 моделей)">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE721;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                <TextBlock Text="Пресет под мои наушники" Margin="8,0,0,0"/>
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
-                </Border>
-
-                <!-- Appearance -->
-                <Border Style="{StaticResource Card}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource CardTitle}" Text="ОФОРМЛЕНИЕ"/>
-                        <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4">
-                            <UniformGrid Columns="3">
-                                <RadioButton x:Name="ThemeDark" GroupName="Theme" Style="{StaticResource Segment}" Content="Тёмная" Tag="Dark" Checked="Theme_Checked"/>
-                                <RadioButton x:Name="ThemeLight" GroupName="Theme" Style="{StaticResource Segment}" Content="Светлая" Tag="Light" Checked="Theme_Checked"/>
-                                <RadioButton x:Name="ThemeSystem" GroupName="Theme" Style="{StaticResource Segment}" Content="Системная" Tag="System" ToolTip="Как в настройках Windows" Checked="Theme_Checked"/>
-                            </UniformGrid>
-                        </Border>
-                        <TextBlock Text="Цвет" FontSize="12" Foreground="{DynamicResource SubTextBrush}" Margin="2,12,0,6"/>
-                        <UniformGrid x:Name="AccentPanel" Columns="6"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Settings -->
-                <Border Style="{StaticResource Card}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource CardTitle}" Text="ПРИЛОЖЕНИЕ"/>
-                        <CheckBox x:Name="AutostartSwitch" Style="{StaticResource Switch}" Content="Запускать вместе с Windows" Click="AutostartSwitch_Click"/>
-                        <CheckBox x:Name="MinimizeSwitch" Style="{StaticResource Switch}" Content="Сворачивать в трей при закрытии" Click="MinimizeSwitch_Click"/>
-                        <CheckBox x:Name="NotifySwitch" Style="{StaticResource Switch}" Content="Сообщать о смене режима" Click="NotifySwitch_Click"/>
-                        <CheckBox x:Name="OsdSwitch" Style="{StaticResource Switch}" Content="Подсказка на экране (поверх игр)" Click="OsdSwitch_Click"
-                                  ToolTip="Вместо уведомлений Windows — короткая надпись по центру экрана"/>
-                        <CheckBox x:Name="MicSoundsSwitch" Style="{StaticResource Switch}" Content="Звук при выключении микрофона" Click="MicSoundsSwitch_Click"/>
-                        <CheckBox x:Name="DiscordSwitch" Style="{StaticResource Switch}" Content="Статус в Discord" Click="DiscordSwitch_Click"
-                                  ToolTip="В профиле Discord видно «SoundShot · Игры»"/>
-                        <StackPanel x:Name="DiscordSetup" Visibility="Collapsed" Margin="0,2,0,6">
-                            <TextBlock FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"
-                                       Text="Application ID приложения Discord (discord.com/developers → New Application → скопировать Application ID):"/>
-                            <TextBox x:Name="DiscordIdBox" Margin="0,6,0,0" Padding="6,4" LostFocus="DiscordIdBox_LostFocus"/>
-                            <TextBlock x:Name="DiscordStatus" Margin="0,6,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"/>
-                        </StackPanel>
-                        <Button x:Name="AudioCenterAutostartButton" Style="{StaticResource GhostButton}" Margin="0,6,0,6" HorizontalAlignment="Stretch"
-                                Click="AudioCenterAutostart_Click" Visibility="Collapsed"
-                                ToolTip="Официальный Audio Center запускается с Windows и может перезаписывать ваши настройки звука">
-                            <TextBlock Text="Убрать Audio Center из автозагрузки"/>
-                        </Button>
-                        <CheckBox x:Name="UpdatesSwitch" Style="{StaticResource Switch}" Content="Проверять обновления" Click="UpdatesSwitch_Click"/>
-                        <Grid Margin="0,6,0,0">
-                            <TextBlock x:Name="VersionText" FontSize="12" Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center"/>
-                            <Button x:Name="CheckUpdateButton" HorizontalAlignment="Right" Style="{StaticResource GhostButton}" Click="CheckUpdate_Click" Content="Проверить"/>
-                        </Grid>
-                    </StackPanel>
-                </Border>
+                        <ContentPresenter VerticalAlignment="Center" />
+                        <TextBlock x:Name="Arrow" Grid.Column="1" Text="" FontFamily="{StaticResource IconFont}" FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                      </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                      <Trigger Property="IsMouseOver" Value="True">
+                        <Setter TargetName="HeaderSurface" Property="Background" Value="{DynamicResource GhostHoverBrush}" />
+                      </Trigger>
+                      <Trigger Property="IsChecked" Value="True">
+                        <Setter TargetName="Arrow" Property="Text" Value="" />
+                      </Trigger>
+                      <Trigger Property="IsKeyboardFocused" Value="True">
+                        <Setter TargetName="HeaderSurface" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                      </Trigger>
+                    </ControlTemplate.Triggers>
+                  </ControlTemplate>
+                </ToggleButton.Template>
+              </ToggleButton>
+              <ContentPresenter x:Name="Details" Visibility="Collapsed" Margin="0,10,0,0" />
             </StackPanel>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsExpanded" Value="True">
+                <Setter TargetName="Details" Property="Visibility" Value="Visible" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="SidebarNav" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="{DynamicResource SubTextBrush}" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Margin" Value="0,3" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="Surface" Background="Transparent" CornerRadius="10" Padding="14,13" BorderThickness="1" BorderBrush="Transparent">
+              <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource GhostHoverBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource SelectedBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Surface" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="CompactCard" TargetType="Border" BasedOn="{StaticResource Card}">
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="14" />
+      <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+    <Style x:Key="NavigationTab" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="{DynamicResource SubTextBrush}" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="MinHeight" Value="40" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="Surface" Background="Transparent" CornerRadius="8" BorderThickness="1" BorderBrush="Transparent" Padding="8,10">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource GhostHoverBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource SelectedBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Surface" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="SidebarKeyboardFocus" TargetType="Control">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Control">
+            <Border Width="24" Height="48" CornerRadius="12" BorderThickness="1" BorderBrush="{DynamicResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center" />
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="SidebarRail" TargetType="Button">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusVisualStyle" Value="{StaticResource SidebarKeyboardFocus}" />
+      <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Foreground" Value="{DynamicResource SubTextBrush}" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="VerticalAlignment" Value="Stretch" />
+      <Setter Property="SnapsToDevicePixels" Value="True" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Grid Background="{TemplateBinding Background}">
+              <Border x:Name="Rail" Width="1" HorizontalAlignment="Center" Background="{DynamicResource CardBorderBrush}" />
+              <Border x:Name="Grip" Width="24" Height="48" CornerRadius="12" VerticalAlignment="Center" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Grip" Property="Background" Value="{DynamicResource GhostHoverBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Grip" Property="Background" Value="{DynamicResource GhostPressedBrush}" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+  <Grid Margin="12" Background="{DynamicResource BgBrush}">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="Auto" />
+      <ColumnDefinition Width="24" />
+      <ColumnDefinition Width="*" />
+    </Grid.ColumnDefinitions>
+    <Border Background="{DynamicResource CardBrush}" CornerRadius="18" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1">
+      <DockPanel x:Name="SidebarHost" Width="208" ClipToBounds="True" Margin="8,14">
+        <Border x:Name="BrandSlot" DockPanel.Dock="Top">
+          <Border x:Name="SidebarHeader" Height="56" Padding="8,0" Margin="0">
+            <Grid ClipToBounds="True">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <Border x:Name="BrandLogo" Width="38" Height="38" CornerRadius="10" Background="{DynamicResource AccentGradient}">
+                <TextBlock Text="" FontFamily="{StaticResource IconFont}" FontSize="18" Foreground="{DynamicResource AccentTextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+              <StackPanel Grid.Column="1" Margin="11,0,8,0" VerticalAlignment="Center">
+                <TextBlock Text="SoundShot" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="BrandSubtitle" Text="Наушники IO" FontSize="11" Foreground="{DynamicResource SubTextBrush}" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </Grid>
+          </Border>
+        </Border>
+        <Border DockPanel.Dock="Bottom" Margin="8,16,8,0" Padding="12" CornerRadius="10" Background="{DynamicResource InsetBrush}">
+          <TextBlock x:Name="NavigationHint" Text="Ваш звук. Ваши моменты." Foreground="{DynamicResource SubTextBrush}" FontSize="11" TextWrapping="NoWrap" Height="16" />
+        </Border>
+        <ScrollViewer x:Name="SidebarScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel x:Name="SidebarNavigation" Margin="0,12,0,0">
+            <TextBlock Text="ОСНОВНОЕ" Foreground="{DynamicResource SubTextBrush}" FontSize="10" FontWeight="SemiBold" Margin="14,18,0,8" />
+            <RadioButton x:Name="TabEq" GroupName="Tab" Style="{StaticResource SidebarNav}" Tag="Eq" Checked="Tab_Checked" ToolTip="Звук">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" FontSize="16" Width="24" />
+                <TextBlock Text="Звук" Margin="10,0,0,0" />
+              </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="TabMic" GroupName="Tab" Style="{StaticResource SidebarNav}" Tag="Mic" Checked="Tab_Checked" ToolTip="Микрофон">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" FontSize="16" Width="24" />
+                <TextBlock Text="Микрофон" Margin="10,0,0,0" />
+              </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="TabRecord" GroupName="Tab" Style="{StaticResource SidebarNav}" Tag="Record" Checked="Tab_Checked" ToolTip="Запись">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" FontSize="16" Width="24" />
+                <TextBlock Text="Запись" Margin="10,0,0,0" />
+              </StackPanel>
+            </RadioButton>
+            <TextBlock Text="ИНСТРУМЕНТЫ" Foreground="{DynamicResource SubTextBrush}" FontSize="10" FontWeight="SemiBold" Margin="14,18,0,8" />
+            <RadioButton x:Name="TabEffects" GroupName="Tab" Style="{StaticResource SidebarNav}" Tag="Effects" Checked="Tab_Checked" ToolTip="Эффекты">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" FontSize="16" Width="24" />
+                <TextBlock Text="Эффекты" Margin="10,0,0,0" />
+              </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="TabSettings" GroupName="Tab" Style="{StaticResource SidebarNav}" Tag="Settings" Checked="Tab_Checked" ToolTip="Настройки">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="" FontFamily="{StaticResource IconFont}" FontSize="16" Width="24" VerticalAlignment="Center" />
+                <TextBlock Text="Настройки" Margin="10,0,0,0" />
+              </StackPanel>
+            </RadioButton>
+          </StackPanel>
         </ScrollViewer>
-
-        <!-- ================= MAIN ================= -->
-        <Grid Grid.Column="2">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-
-            <Border x:Name="Banner" Visibility="Collapsed" Background="{DynamicResource BannerBrush}" BorderBrush="{DynamicResource BannerBorderBrush}" BorderThickness="1"
-                    CornerRadius="12" Padding="14,10" Margin="0,0,0,12">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE7BA;" FontFamily="{StaticResource IconFont}" Foreground="{DynamicResource WarnBrush}" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="BannerText" Margin="10,0,0,0" Foreground="{DynamicResource WarnBrush}" TextWrapping="Wrap"/>
-                </StackPanel>
-            </Border>
-
-            <!-- Tabs -->
-            <Border Grid.Row="1" Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4"
-                    HorizontalAlignment="Left" Margin="0,0,0,14">
-                <StackPanel Orientation="Horizontal">
-                    <RadioButton x:Name="TabEq" GroupName="Tab" Style="{StaticResource Segment}" Width="126" Tag="Eq" Checked="Tab_Checked">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE9E9;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                            <TextBlock Text="Эквалайзер" Margin="8,0,0,0"/>
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton x:Name="TabEffects" GroupName="Tab" Style="{StaticResource Segment}" Width="126" Tag="Effects" Checked="Tab_Checked">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE909;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                            <TextBlock Text="Эффекты" Margin="8,0,0,0"/>
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton x:Name="TabMic" GroupName="Tab" Style="{StaticResource Segment}" Width="126" Tag="Mic" Checked="Tab_Checked">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE720;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                            <TextBlock Text="Микрофон" Margin="8,0,0,0"/>
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton x:Name="TabAuto" GroupName="Tab" Style="{StaticResource Segment}" Width="126" Tag="Auto" Checked="Tab_Checked">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE945;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                            <TextBlock Text="Авто" Margin="8,0,0,0"/>
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton x:Name="TabMixer" GroupName="Tab" Style="{StaticResource Segment}" Width="126" Tag="Mixer" Checked="Tab_Checked">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE9F5;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                            <TextBlock Text="Микшер" Margin="8,0,0,0"/>
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton x:Name="TabRecord" GroupName="Tab" Style="{StaticResource Segment}" Width="126" Tag="Record" Checked="Tab_Checked">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE714;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                            <TextBlock Text="Запись" Margin="8,0,0,0"/>
-                        </StackPanel>
-                    </RadioButton>
-                </StackPanel>
-            </Border>
-
-            <!-- ===== Page: equalizer ===== -->
-            <Grid x:Name="PageEq" Grid.Row="2">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-            <!-- Listening modes -->
-            <UniformGrid Grid.Row="0" Columns="3" Margin="0,0,0,12">
-                <RadioButton x:Name="ModeGames" GroupName="Mode" Style="{StaticResource ModeCard}" Tag="Games" Margin="0,0,8,0" Checked="Mode_Checked">
-                    <StackPanel>
-                        <TextBlock Text="&#xE7FC;" FontFamily="{StaticResource IconFont}" FontSize="24" Foreground="{DynamicResource AccentBrush}"/>
-                        <TextBlock Text="Игры" FontSize="17" FontWeight="SemiBold" Margin="0,10,0,2"/>
-                        <TextBlock Text="Шаги, выстрелы, позиционирование" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"/>
-                        <TextBlock x:Name="HkGames" FontSize="11" Foreground="{DynamicResource SubTextBrush}" Opacity="0.7" Margin="0,10,0,0"/>
-                    </StackPanel>
-                </RadioButton>
-                <RadioButton x:Name="ModeMusic" GroupName="Mode" Style="{StaticResource ModeCard}" Tag="Music" Margin="4,0" Checked="Mode_Checked">
-                    <StackPanel>
-                        <TextBlock Text="&#xE8D6;" FontFamily="{StaticResource IconFont}" FontSize="24" Foreground="{DynamicResource AccentBrush}"/>
-                        <TextBlock Text="Музыка" FontSize="17" FontWeight="SemiBold" Margin="0,10,0,2"/>
-                        <TextBlock Text="Естественный и сбалансированный звук" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"/>
-                        <TextBlock x:Name="HkMusic" FontSize="11" Foreground="{DynamicResource SubTextBrush}" Opacity="0.7" Margin="0,10,0,0"/>
-                    </StackPanel>
-                </RadioButton>
-                <RadioButton x:Name="ModeMovies" GroupName="Mode" Style="{StaticResource ModeCard}" Tag="Movies" Margin="8,0,0,0" Checked="Mode_Checked">
-                    <StackPanel>
-                        <TextBlock Text="&#xE8B2;" FontFamily="{StaticResource IconFont}" FontSize="24" Foreground="{DynamicResource AccentBrush}"/>
-                        <TextBlock Text="Фильмы" FontSize="17" FontWeight="SemiBold" Margin="0,10,0,2"/>
-                        <TextBlock Text="Глубокий бас и разборчивые диалоги" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"/>
-                        <TextBlock x:Name="HkMovies" FontSize="11" Foreground="{DynamicResource SubTextBrush}" Opacity="0.7" Margin="0,10,0,0"/>
-                    </StackPanel>
-                </RadioButton>
-            </UniformGrid>
-
-            <!-- Equalizer -->
-            <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0" Padding="22,18">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <Grid>
-                        <StackPanel>
-                            <TextBlock Text="Эквалайзер" FontSize="19" FontWeight="SemiBold"/>
-                            <TextBlock x:Name="PresetTitle" Margin="0,3,0,0" Foreground="{DynamicResource SubTextBrush}"/>
-                            <TextBlock x:Name="ClipInfo" Margin="0,4,0,0" FontSize="12" Foreground="{DynamicResource WarnBrush}" Visibility="Collapsed"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
-                            <CheckBox x:Name="ClipGuardSwitch" Style="{StaticResource Switch}" Content="Защита от перегруза" Margin="0,4,24,4"
-                                      Click="ClipGuardSwitch_Click"
-                                      ToolTip="Если полосы подняты выше 0 дБ, общий уровень немного снижается, чтобы звук не хрипел"/>
-                            <CheckBox x:Name="EqSwitch" Style="{StaticResource Switch}" Content="Включён" Click="EqSwitch_Click"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <Grid Grid.Row="1" Margin="0,18,0,10">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="44"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <!-- dB scale, rows match the bands grid -->
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="26"/>
-                                <RowDefinition Height="*"/>
-                                <RowDefinition Height="26"/>
-                            </Grid.RowDefinitions>
-                            <Grid Grid.Row="1" Margin="0,0,0,0">
-                                <TextBlock Text="+20" VerticalAlignment="Top" FontSize="11" Foreground="{DynamicResource SubTextBrush}" Margin="0,0,0,0"/>
-                                <TextBlock Text="0 дБ" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource SubTextBrush}"/>
-                                <TextBlock Text="−20" VerticalAlignment="Bottom" FontSize="11" Foreground="{DynamicResource SubTextBrush}"/>
-                            </Grid>
-                        </Grid>
-                        <Grid x:Name="BandsGrid" Grid.Column="1">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="26"/>
-                                <RowDefinition Height="*"/>
-                                <RowDefinition Height="26"/>
-                            </Grid.RowDefinitions>
-                        </Grid>
-                        <!-- shown for headsets without the C-Media equalizer -->
-                        <Border x:Name="EqUnavailable" Grid.ColumnSpan="2" Visibility="Collapsed" Background="{DynamicResource CardBrush}"
-                                CornerRadius="12" Opacity="0.96">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="460" Margin="0,8">
-                                <Border x:Name="EqUnavailableIcon" Width="52" Height="52" CornerRadius="14" Background="{DynamicResource InsetBrush}" HorizontalAlignment="Center">
-                                    <TextBlock Text="&#xE9E9;" FontFamily="{StaticResource IconFont}" FontSize="22" Foreground="{DynamicResource SubTextBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="Эквалайзер недоступен для этих наушников" FontSize="16" FontWeight="SemiBold"
-                                           HorizontalAlignment="Center" Margin="0,14,0,6"/>
-                                <TextBlock x:Name="EqUnavailableText" TextAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource SubTextBrush}"
-                                           Text="Встроенный эквалайзер есть у гарнитур на чипе C-Media (например io Graphite 2 Pro). Громкость, микрофон, автоматика, анализатор и тесты работают с любыми наушниками."/>
-                                <!-- one-click official driver install for io Graphite headsets -->
-                                <StackPanel x:Name="DriverOffer" Visibility="Collapsed" Margin="0,18,0,0">
-                                    <TextBlock TextAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"
-                                               Text="Похоже, не установлен драйвер наушников. Установить его с официального сайта IO?"/>
-                                    <Grid Margin="0,12,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="10"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <ComboBox x:Name="DriverModelCombo" DisplayMemberPath="Title"/>
-                                        <Button x:Name="DriverInstallButton" Grid.Column="2" Style="{StaticResource AccentButton}" Click="DriverInstall_Click">
-                                            <TextBlock x:Name="DriverInstallText" Text="Установить драйвер"/>
-                                        </Button>
-                                    </Grid>
-                                    <TextBlock x:Name="DriverStatus" Margin="0,10,0,0" TextAlignment="Center" TextWrapping="Wrap" FontSize="12"
-                                               Foreground="{DynamicResource SubTextBrush}"
-                                               Text="Для Graphite 2 Wireless FE драйвера у производителя нет — для неё подойдёт вариант ниже."/>
-                                </StackPanel>
-                                <!-- Equalizer APO: equalizer for any headphones -->
-                                <Border x:Name="ApoOffer" Visibility="Collapsed" Margin="0,18,0,0" Padding="16,14" CornerRadius="12"
-                                        Background="{DynamicResource InsetBrush}">
-                                    <StackPanel>
-                                        <TextBlock x:Name="ApoTitle" TextAlignment="Center" FontWeight="SemiBold" TextWrapping="Wrap"
-                                                   Text="Эквалайзер для любых наушников"/>
-                                        <TextBlock x:Name="ApoText" Margin="0,6,0,12" TextAlignment="Center" TextWrapping="Wrap" FontSize="12"
-                                                   Foreground="{DynamicResource SubTextBrush}"
-                                                   Text="SoundShot поставит бесплатный Equalizer APO и будет управлять им сам. В его окне один раз отметьте свои наушники, потом перезагрузите компьютер."/>
-                                        <Button x:Name="ApoButton" Style="{StaticResource AccentButton}" HorizontalAlignment="Center" MinWidth="220" Click="ApoButton_Click">
-                                            <TextBlock x:Name="ApoButtonText" Text="Включить эквалайзер"/>
-                                        </Button>
-                                    </StackPanel>
-                                </Border>
-                            </StackPanel>
-                            </ScrollViewer>
-                        </Border>
-                    </Grid>
-
-                    <Grid Grid.Row="2">
-                        <StackPanel Orientation="Horizontal">
-                            <Button x:Name="ResetButton" Style="{StaticResource GhostButton}" Click="Reset_Click" ToolTip="Вернуть заводские значения этого пресета">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE777;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Сбросить пресет" Margin="8,0,0,0"/>
-                                </StackPanel>
-                            </Button>
-                            <Button x:Name="FlatButton" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="Flat_Click" ToolTip="Все полосы на 0 дБ">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE738;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Ровно" Margin="8,0,0,0"/>
-                                </StackPanel>
-                            </Button>
-                            <Button x:Name="CompareButton" Style="{StaticResource GhostButton}" Margin="8,0,0,0"
-                                    PreviewMouseLeftButtonDown="Compare_Down" PreviewMouseLeftButtonUp="Compare_Up" MouseLeave="Compare_Leave"
-                                    ToolTip="Держите — звук без эквалайзера и эффектов, отпустите — снова ваш. Горячая клавиша переключает">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE8E1;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="CompareText" Text="Сравнить" Margin="8,0,0,0"/>
-                                </StackPanel>
-                            </Button>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                            <CheckBox x:Name="AnalyzerSwitch" Style="{StaticResource Switch}" Content="Анализатор" Margin="0,0,16,0"
-                                      Click="AnalyzerSwitch_Click" ToolTip="Показывать за кривой, какие частоты звучат сейчас"/>
-                            <Button x:Name="HearingTestButton" Style="{StaticResource AccentButton}" Click="HearingTest_Click"
-                                    ToolTip="2–3 минуты: эквалайзер подстроится под ваш слух · колёсико мыши — шаг 1 дБ, двойной клик — 0 дБ">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE7F6;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Тест слуха" Margin="8,0,0,0"/>
-                                </StackPanel>
-                            </Button>
-                        </StackPanel>
-                    </Grid>
-                </Grid>
-            </Border>
-
+      </DockPanel>
+    </Border>
+    <Button x:Name="SidebarToggle" Grid.Column="1" Style="{StaticResource SidebarRail}" Click="SidebarToggle_Click" Content="" ToolTip="Свернуть навигацию" />
+    <Grid Grid.Column="2" Margin="8,8,8,0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+        <RowDefinition Height="Auto" />
+      </Grid.RowDefinitions>
+      <StackPanel x:Name="PageHeading" Margin="0,0,0,14">
+        <TextBlock x:Name="PageTitle" Text="Звук" FontSize="26" FontWeight="SemiBold" />
+        <TextBlock x:Name="PageDescription" Text="Выберите настроение. Подстройте детали под себя." Foreground="{DynamicResource SubTextBrush}" Margin="0,5,0,0" TextWrapping="Wrap" />
+        <Border x:Name="Banner" Visibility="Collapsed" Background="{DynamicResource BannerBrush}" BorderBrush="{DynamicResource BannerBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="14,10" Margin="0,0,0,12">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="" FontFamily="{StaticResource IconFont}" Foreground="{DynamicResource WarnBrush}" VerticalAlignment="Center" />
+            <TextBlock x:Name="BannerText" Margin="10,0,0,0" Foreground="{DynamicResource WarnBrush}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+        <Border x:Name="UpdateCard" Visibility="Collapsed" Background="{DynamicResource AccentGradient}" CornerRadius="14" Padding="16,12" Margin="0,0,0,12">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock x:Name="UpdateTitle" Foreground="White" FontWeight="SemiBold" Text="Доступна новая версия" />
+              <TextBlock x:Name="UpdateNotes" Foreground="#DDFFFFFF" FontSize="12" TextWrapping="Wrap" MaxHeight="34" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <Button x:Name="UpdateButton" Grid.Column="1" Margin="10,0,0,0" Click="Update_Click" Style="{StaticResource GhostButton}" ToolTip="Начинает обновление SoundShot до доступной версии. Сначала прочитайте описание обновления рядом с кнопкой.">
+              <TextBlock x:Name="UpdateButtonText" Text="Обновить" />
+            </Button>
+          </Grid>
+        </Border>
+      </StackPanel>
+      <Border x:Name="OutputStrip" Grid.Row="1" Style="{StaticResource CompactCard}" Padding="18,14" Margin="0,0,0,16">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="24" />
+            <ColumnDefinition Width="220" />
+          </Grid.ColumnDefinitions>
+          <StackPanel x:Name="OutputChoice">
+            <TextBlock Text="УСТРОЙСТВО ВЫВОДА" Visibility="Collapsed" />
+            <ComboBox x:Name="DeviceCombo" SelectionChanged="DeviceCombo_SelectionChanged" HorizontalAlignment="Stretch" ToolTip="Устройство, звук которого вы настраиваете. Выберите наушники или колонки; громкость, эквалайзер и микшер ниже относятся к этому устройству." />
+            <Grid Margin="2,10,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <Ellipse x:Name="StatusDot" Width="8" Height="8" Fill="{DynamicResource SubTextBrush}" VerticalAlignment="Top" Margin="0,5,0,0" />
+              <TextBlock x:Name="StatusText" Grid.Column="1" Margin="8,0,0,0" Text="Поиск наушников…" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" />
             </Grid>
-
-            <!-- ===== Page: effects ===== -->
-            <Grid x:Name="PageEffects" Grid.Row="2" Visibility="Collapsed">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-                <Grid Margin="0,0,0,8">
-                    <StackPanel>
-                        <TextBlock Text="Звуковые эффекты" FontSize="19" FontWeight="SemiBold"/>
-                        <TextBlock Text="Работают вместе с эквалайзером и применяются сразу." Margin="0,3,0,0" Foreground="{DynamicResource SubTextBrush}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <CheckBox x:Name="LinkEffectsSwitch" Style="{StaticResource Switch}" Content="Свои эффекты для каждого режима"
-                                  Margin="0,0,16,0" Click="LinkEffectsSwitch_Click"
-                                  ToolTip="Игры, Музыка, Фильмы и ваши пресеты запоминают свой набор эффектов"/>
-                        <Button x:Name="ResetEffectsButton" Style="{StaticResource GhostButton}" Click="ResetEffects_Click"
-                                ToolTip="Выключить все эффекты и вернуть стандартные уровни">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE777;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                <TextBlock Text="Стандартные" Margin="8,0,0,0"/>
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
-                </Grid>
-                <ScrollViewer x:Name="EffectsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel>
-                        <TextBlock x:Name="EffectsProfileText" Margin="2,0,0,8" FontSize="12" Foreground="{DynamicResource SubTextBrush}"/>
-                        <TextBlock x:Name="EffectsEmpty" Visibility="Collapsed" Margin="2,4,0,12" TextWrapping="Wrap" Foreground="{DynamicResource SubTextBrush}"
-                                   Text="У этих наушников нет встроенных эффектов C-Media. Проверка каналов ниже работает с любыми наушниками."/>
-                        <UniformGrid x:Name="OutputEffectsGrid" Columns="2" Margin="-6,0" VerticalAlignment="Top"/>
-                        <!-- Channel test -->
-                        <Border Style="{StaticResource Card}" Margin="0,6,0,0" Padding="18,16">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Border Width="38" Height="38" CornerRadius="10" Background="{DynamicResource InsetBrush}" VerticalAlignment="Top">
-                                    <TextBlock Text="&#xE7F5;" FontFamily="{StaticResource IconFont}" FontSize="17" Foreground="{DynamicResource AccentBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <StackPanel Grid.Column="1" Margin="12,0">
-                                    <TextBlock Text="Проверка каналов" FontSize="15" FontWeight="SemiBold"/>
-                                    <TextBlock x:Name="ChannelTestText" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"
-                                               Text="Короткий шум по очереди из каждого канала. С включённым 7.1 удобно проверить, откуда слышен звук."/>
-                                </StackPanel>
-                                <Button x:Name="ChannelTestButton" Grid.Column="2" Style="{StaticResource AccentButton}" VerticalAlignment="Center" Click="ChannelTest_Click">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock x:Name="ChannelTestIcon" Text="&#xE768;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="ChannelTestButtonText" Text="Запустить" Margin="8,0,0,0"/>
-                                    </StackPanel>
-                                </Button>
-                            </Grid>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
+            <TextBlock x:Name="BatteryText" Text="" Visibility="Collapsed" Margin="2,6,0,0" Foreground="{DynamicResource SubTextBrush}" FontWeight="SemiBold" ToolTip="Заряд батареи беспроводного устройства. Показывается, только если устройство отдаёт его по стандарту (HID Battery Page или BLE)." />
+          </StackPanel>
+          <StackPanel x:Name="OutputVolume" Grid.Column="2" VerticalAlignment="Center">
+            <Grid Margin="0,0,0,5">
+              <Button x:Name="MixerOpenButton" HorizontalAlignment="Right" Style="{StaticResource GhostButton}" Padding="8,4" Content="Громкость программ" Click="MixerOpen_Click" ToolTip="Открывает отдельные регуляторы для игры, музыки и других программ на выбранном устройстве. Общая громкость остаётся рядом. Панель закрывается клавишей Esc или щелчком снаружи." />
             </Grid>
-
-            <!-- ===== Page: microphone ===== -->
-            <ScrollViewer x:Name="PageMic" Grid.Row="2" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel>
-                    <Border Style="{StaticResource Card}" Padding="20,18">
-                        <StackPanel>
-                            <Grid>
-                                <StackPanel>
-                                    <TextBlock Text="Микрофон" FontSize="19" FontWeight="SemiBold"/>
-                                    <TextBlock x:Name="MicName" Margin="0,3,0,0" Foreground="{DynamicResource SubTextBrush}" Text="Поиск микрофона…"/>
-                                </StackPanel>
-                            </Grid>
-                            <Grid Margin="0,18,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <ToggleButton x:Name="MicMuteButton" Style="{StaticResource IconToggle}" Click="MicMute_Click" ToolTip="Выключить микрофон">
-                                    <TextBlock x:Name="MicMuteIcon" Text="&#xE720;" FontFamily="{StaticResource IconFont}" FontSize="15"/>
-                                </ToggleButton>
-                                <Slider x:Name="MicVolumeSlider" Grid.Column="1" Style="{StaticResource VolumeSlider}" Margin="12,0"
-                                        VerticalAlignment="Center" ValueChanged="MicVolume_ValueChanged"/>
-                                <TextBlock x:Name="MicVolumeText" Grid.Column="2" Text="—" Width="44" TextAlignment="Right"
-                                           VerticalAlignment="Center" FontWeight="SemiBold"/>
-                            </Grid>
-                            <Grid Margin="0,16,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Уровень" FontSize="12" Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center" Width="46"/>
-                                <Border x:Name="MicMeterTrack" Grid.Column="1" Height="10" CornerRadius="5" Background="{DynamicResource TrackBrush}" Margin="0,0,12,0">
-                                    <Border x:Name="MicMeterFill" HorizontalAlignment="Left" Width="0" CornerRadius="5">
-                                        <Border.Background>
-                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                                <GradientStop Color="#3DDC97" Offset="0"/>
-                                                <GradientStop Color="#3DDC97" Offset="0.6"/>
-                                                <GradientStop Color="#F5A524" Offset="0.85"/>
-                                                <GradientStop Color="#FF4860" Offset="1"/>
-                                            </LinearGradientBrush>
-                                        </Border.Background>
-                                    </Border>
-                                </Border>
-                                <TextBlock x:Name="MicMeterText" Grid.Column="2" Width="64" TextAlignment="Right" FontSize="12"
-                                           Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center" Text="—"/>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-                    <UniformGrid x:Name="MicEffectsGrid" Columns="2" Margin="-6,0" VerticalAlignment="Top"/>
-                    <!-- RNNoise via Equalizer APO: noise suppression for any microphone -->
-                    <Border x:Name="NrCard" Style="{StaticResource Card}" Margin="0,6,0,0" Padding="18,16">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <Border Width="38" Height="38" CornerRadius="10" Background="{DynamicResource InsetBrush}" VerticalAlignment="Top">
-                                <TextBlock Text="&#xE720;" FontFamily="{StaticResource IconFont}" FontSize="17" Foreground="{DynamicResource AccentBrush}"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <StackPanel Grid.Column="1" Margin="12,0">
-                                <TextBlock Text="Шумоподавление для любого микрофона" FontSize="15" FontWeight="SemiBold"/>
-                                <TextBlock x:Name="NrText" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                <CheckBox x:Name="NrSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="NrSwitch_Click" Visibility="Collapsed"/>
-                                <Button x:Name="NrButton" Style="{StaticResource AccentButton}" Click="NrButton_Click" Visibility="Collapsed">
-                                    <TextBlock x:Name="NrButtonText"/>
-                                </Button>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-                    <!-- Hear yourself -->
-                    <Border Style="{StaticResource Card}" Margin="0,6,0,0" Padding="18,16">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <Border Width="38" Height="38" CornerRadius="10" Background="{DynamicResource InsetBrush}" VerticalAlignment="Top">
-                                <TextBlock Text="&#xE7F6;" FontFamily="{StaticResource IconFont}" FontSize="17" Foreground="{DynamicResource AccentBrush}"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <StackPanel Grid.Column="1" Margin="12,0">
-                                <TextBlock Text="Слышать себя" FontSize="15" FontWeight="SemiBold"/>
-                                <TextBlock FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"
-                                           Text="Звук микрофона идёт в наушники — удобно проверить шумоподавление и Magic Voice. Небольшая задержка — это нормально."/>
-                            </StackPanel>
-                            <CheckBox x:Name="MonitorSwitch" Grid.Column="2" Style="{StaticResource Switch}" VerticalAlignment="Center" Click="MonitorSwitch_Click"/>
-                        </Grid>
-                    </Border>
-                    <TextBlock Margin="4,4,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"
-                               x:Name="MicHotkeyText"/>
-                </StackPanel>
-            </ScrollViewer>
-
-            <!-- ===== Page: automation ===== -->
-            <ScrollViewer x:Name="PageAuto" Grid.Row="2" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel>
-                    <Border Style="{StaticResource Card}" Padding="20,18">
-                        <StackPanel>
-                            <Grid>
-                                <StackPanel>
-                                    <TextBlock Text="Автопереключение по программам" FontSize="19" FontWeight="SemiBold"/>
-                                    <TextBlock Margin="0,3,0,0" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"
-                                               Text="Когда программа из списка становится активной, включается её режим. Вы ушли из неё — возвращается ваш обычный режим."/>
-                                </StackPanel>
-                                <CheckBox x:Name="AutoSwitchSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Top"
-                                          Click="AutoSwitchSwitch_Click"/>
-                            </Grid>
-                            <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="12,9" Margin="0,14,0,0">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE7C4;" FontFamily="{StaticResource IconFont}" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="ForegroundText" Margin="10,0,0,0" Foreground="{DynamicResource SubTextBrush}" Text="Активная программа: —"/>
-                                </StackPanel>
-                            </Border>
-                            <CheckBox x:Name="FullscreenSwitch" Style="{StaticResource Switch}" Margin="0,12,0,0" Click="FullscreenSwitch_Click"
-                                      Content="Видео на весь экран в браузере → режим «Фильмы»"
-                                      ToolTip="YouTube, Кинопоиск и любое видео в браузере или Telegram на весь экран. Свернули — вернётся прежний режим"/>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}" Padding="20,18">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource CardTitle}" Text="ПРОГРАММЫ И ИГРЫ"/>
-                            <TextBlock Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,0,0,12"
-                                       Text="Выберите программу или игру и звук для неё — он включится сам, пока она на экране. Для каждой программы в списке ниже можно сменить пресет или сделать отдельный звук."/>
-                            <Button Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Click="AddApp_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE710;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Добавить программу…" Margin="8,0,0,0"/>
-                                </StackPanel>
-                            </Button>
-                            <Expander Header="Дополнительно: правило по заголовку окна или имени" Margin="0,14,0,0" Foreground="{DynamicResource SubTextBrush}">
-                            <Grid Margin="0,10,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="170"/>
-                                    <ColumnDefinition Width="10"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="10"/>
-                                    <ColumnDefinition Width="170"/>
-                                    <ColumnDefinition Width="10"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <ComboBox x:Name="RuleKind" SelectedIndex="0" SelectionChanged="RuleKind_SelectionChanged">
-                                    <ComboBoxItem Content="Программа"/>
-                                    <ComboBoxItem Content="Заголовок окна"/>
-                                </ComboBox>
-                                <ComboBox x:Name="RuleProcess" Grid.Column="2" IsEditable="True" DropDownOpened="RuleProcess_DropDownOpened"
-                                          ToolTip="Имя программы (например cs2) — или выберите из запущенных"/>
-                                <ComboBox x:Name="RuleTarget" Grid.Column="4" DisplayMemberPath="Label"/>
-                                <Button Grid.Column="6" Style="{StaticResource AccentButton}" Click="AddRule_Click">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="&#xE710;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                        <TextBlock Text="Добавить" Margin="8,0,0,0"/>
-                                    </StackPanel>
-                                </Button>
-                            </Grid>
-                            </Expander>
-                            <TextBlock Style="{StaticResource CardTitle}" Text="ВАШИ ПРОГРАММЫ" Margin="0,20,0,8"/>
-                            <StackPanel x:Name="RulesPanel"/>
-                            <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,10,0,0" Click="ResetRules_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE777;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Вернуть список по умолчанию" Margin="8,0,0,0"/>
-                                </StackPanel>
-                            </Button>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
-
-            <!-- ===== Page: screen recording / replays ===== -->
-            <ScrollViewer x:Name="PageRecord" Grid.Row="2" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel>
-                    <!-- status + actions -->
-                    <Border Style="{StaticResource Card}" Padding="20,18">
-                        <StackPanel>
-                            <Grid>
-                                <StackPanel Margin="0,0,80,0">
-                                    <TextBlock Text="Повторы и запись экрана" FontSize="19" FontWeight="SemiBold"/>
-                                    <TextBlock x:Name="RecStatus" Margin="0,3,0,0" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox x:Name="ReplaySwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Top"
-                                          Click="ReplaySwitch_Click" ToolTip="Постоянно держать последние секунды, чтобы сохранить их одной клавишей"/>
-                            </Grid>
-                            <Grid Margin="0,16,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="10"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="10"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="10"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Button x:Name="SaveReplayButton" Style="{StaticResource AccentButton}" Click="SaveReplay_Click">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="&#xE74E;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="SaveReplayText" Text="Сохранить повтор" Margin="8,0,0,0"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="RecordButton" Grid.Column="2" Style="{StaticResource GhostButton}" Click="Record_Click">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Ellipse x:Name="RecordDot" Width="10" Height="10" Fill="#FF4860" VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="RecordText" Text="Начать запись" Margin="8,0,0,0"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button Grid.Column="4" Style="{StaticResource GhostButton}" Click="Screenshot_Click" ToolTip="Сделать скриншот">
-                                    <TextBlock Text="&#xE722;" FontFamily="{StaticResource IconFont}"/>
-                                </Button>
-                                <Button Grid.Column="6" Style="{StaticResource GhostButton}" Click="OpenRecFolder_Click" ToolTip="Открыть папку с роликами">
-                                    <TextBlock Text="&#xE838;" FontFamily="{StaticResource IconFont}"/>
-                                </Button>
-                            </Grid>
-                            <TextBlock x:Name="RecHotkeys" Margin="2,12,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- settings -->
-                    <Border Style="{StaticResource Card}" Padding="20,18">
-                        <StackPanel>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="16"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <StackPanel x:Name="DurationTitle" Orientation="Horizontal">
-                                        <TextBlock Style="{StaticResource CardTitle}" Text="ДЛИТЕЛЬНОСТЬ ПОВТОРА"/>
-                                    </StackPanel>
-                                    <ComboBox x:Name="DurationCombo" DisplayMemberPath="Label"/>
-                                    <Grid x:Name="CustomDurationPanel" Visibility="Collapsed" Margin="0,8,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="80"/>
-                                            <ColumnDefinition Width="8"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="8"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBox x:Name="CustomDurationBox" VerticalContentAlignment="Center" KeyDown="CustomDurationBox_KeyDown"
-                                                 ToolTip="Целое число, например 15"/>
-                                        <ComboBox x:Name="CustomDurationUnit" Grid.Column="2" SelectedIndex="0">
-                                            <ComboBoxItem Content="минут"/>
-                                            <ComboBoxItem Content="секунд"/>
-                                        </ComboBox>
-                                        <Button Grid.Column="4" Style="{StaticResource AccentButton}" Content="Применить" Click="CustomDuration_Click"/>
-                                    </Grid>
-                                    <TextBlock x:Name="DurationHint" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="2,6,0,0"/>
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <StackPanel x:Name="SoundTitle" Orientation="Horizontal">
-                                        <TextBlock Style="{StaticResource CardTitle}" Text="ЗВУК В РОЛИКЕ"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="RecSystemSwitch" Style="{StaticResource Switch}" Content="Звук компьютера" Click="RecSetting_Changed"/>
-                                    <CheckBox x:Name="RecMicSwitch" Style="{StaticResource Switch}" Content="Микрофон" Click="RecSetting_Changed"/>
-                                </StackPanel>
-                            </Grid>
-
-                            <Grid Margin="0,18,0,8">
-                                <StackPanel x:Name="MonitorsTitle" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Style="{StaticResource CardTitle}" Text="МОНИТОРЫ И КАЧЕСТВО ЗАПИСИ" Margin="0"/>
-                                </StackPanel>
-                                <Button HorizontalAlignment="Right" Style="{StaticResource GhostButton}" Click="IdentifyMonitors_Click"
-                                        ToolTip="На каждом мониторе на 3 секунды появится его номер">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="&#xE7F4;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                        <TextBlock Text="Показать номера" Margin="8,0,0,0"/>
-                                    </StackPanel>
-                                </Button>
-                            </Grid>
-                            <StackPanel x:Name="MonitorPanel"/>
-                            <TextBlock x:Name="MonitorHint" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="2,6,0,0"/>
-
-                            <TextBlock Style="{StaticResource CardTitle}" Text="ПАПКА ДЛЯ РОЛИКОВ" Margin="0,16,0,8"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="10"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Border Background="{DynamicResource InsetBrush}" CornerRadius="8" Padding="12,8">
-                                    <TextBlock x:Name="RecFolderText" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-                                </Border>
-                                <Button Grid.Column="2" Style="{StaticResource GhostButton}" Content="Выбрать…" Click="ChooseRecFolder_Click"/>
-                            </Grid>
-                            <TextBlock x:Name="RecInfo" Margin="2,14,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
-
-            <!-- ===== Page: per-program volume ===== -->
-            <ScrollViewer x:Name="PageMixer" Grid.Row="2" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel>
-                    <Border Style="{StaticResource Card}" Padding="20,18">
-                        <Grid>
-                            <StackPanel Margin="0,0,140,0">
-                                <TextBlock Text="Громкость программ" FontSize="19" FontWeight="SemiBold"/>
-                                <TextBlock x:Name="MixerHint" Margin="0,3,0,0" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap"
-                                           Text="Программы, которые сейчас играют звук на выбранном устройстве. Громкость запоминается и восстанавливается при следующем запуске программы."/>
-                            </StackPanel>
-                            <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource GhostButton}" Click="MixerRefresh_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE72C;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Обновить" Margin="8,0,0,0"/>
-                                </StackPanel>
-                            </Button>
-                        </Grid>
-                    </Border>
-                    <StackPanel x:Name="MixerList"/>
-                    <TextBlock x:Name="MixerEmpty" Margin="4,4,0,0" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Visibility="Collapsed"
-                               Text="Сейчас ни одна программа не воспроизводит звук на этом устройстве. Включите музыку, игру или видео — и нажмите «Обновить»."/>
-                </StackPanel>
-            </ScrollViewer>
-
-            <Grid Grid.Row="3" Margin="4,12,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock x:Name="HotkeysText" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                <Button Grid.Column="1" Style="{StaticResource GhostButton}" Margin="12,0,0,0" Click="Hotkeys_Click" ToolTip="Изменить любые горячие клавиши">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE765;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center"/>
-                        <TextBlock Text="Горячие клавиши…" Margin="8,0,0,0"/>
-                    </StackPanel>
-                </Button>
+            <Grid Margin="0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <ToggleButton x:Name="MuteButton" Style="{StaticResource IconToggle}" Click="MuteButton_Click" ToolTip="Выключить звук">
+                <TextBlock x:Name="MuteIcon" Text="" FontFamily="{StaticResource IconFont}" FontSize="15" />
+              </ToggleButton>
+              <Slider x:Name="VolumeSlider" Grid.Column="1" Style="{StaticResource VolumeSlider}" Margin="10,0" VerticalAlignment="Center" ValueChanged="VolumeSlider_ValueChanged" ToolTip="Общая громкость выбранных наушников или колонок в Windows. Меняется сразу. Для одной программы нажмите «Громкость программ» над ползунком." />
+              <TextBlock x:Name="VolumeText" Grid.Column="2" Text="—" Width="40" TextAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold" />
             </Grid>
+          </StackPanel>
         </Grid>
+      </Border>
+      <Grid x:Name="PageEq" Grid.Row="2">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition />
+          <ColumnDefinition Width="14" />
+          <ColumnDefinition Width="280" />
+        </Grid.ColumnDefinitions>
+        <ScrollViewer x:Name="PresetScroll" Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <Grid MinHeight="400" Height="{Binding ViewportHeight, ElementName=PresetScroll}">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Border Style="{StaticResource CompactCard}" Padding="12" Grid.Row="0">
+              <Grid>
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="*" />
+                  <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Style="{StaticResource CardTitle}" Text="МОИ ПРЕСЕТЫ" ToolTip="Сохраните свою настройку эквалайзера, чтобы быстро вернуться к ней. Эффекты, микрофон и запись в пресет не входят." Margin="0,0,0,8" />
+                <Grid Grid.Row="1" Margin="0,0,0,8">
+                  <ListBox x:Name="CustomList" SelectionChanged="CustomList_SelectionChanged" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource PresetItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Нажмите на название, чтобы применить сохранённый эквалайзер. Пресет содержит только полосы частот; эффекты, микрофон и запись настраиваются отдельно." />
+                  <TextBlock x:Name="CustomEmpty" Text="Сохранённых пресетов пока нет" FontSize="11" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="2,0,0,4" VerticalAlignment="Top" />
+                </Grid>
+                <StackPanel Grid.Row="2">
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="CustomName" MaxLength="40" KeyDown="CustomName_KeyDown" VerticalContentAlignment="Center" ToolTip="Название сохраняемого звука. Уже существующее имя обновит этот пресет. Пустое поле — программа предложит название автоматически." AutomationProperties.Name="Название пресета" />
+                    <Button Grid.Column="1" Style="{StaticResource AccentButton}" Margin="6,0,0,0" Click="SaveCustom_Click" ToolTip="Сохраняет текущие полосы эквалайзера под указанным именем. Если такое имя уже есть, его настройка обновится. Эффекты и микрофон не изменяются." Padding="8,7">
+                      <TextBlock Text="" FontFamily="{StaticResource IconFont}" FontSize="14" />
+                    </Button>
+                    <Button x:Name="DeleteCustomButton" Style="{StaticResource GhostButton}" Margin="4,0,0,0" HorizontalAlignment="Stretch" Click="DeleteCustom_Click" IsEnabled="False" ToolTip="Удаляет выбранный пользовательский пресет после подтверждения. Заводские режимы «Игры», «Музыка» и «Фильмы» останутся." Grid.Column="2" Padding="8,7" AutomationProperties.Name="Удалить выбранный пресет">
+                      <TextBlock xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Text="" FontFamily="{StaticResource IconFont}" />
+                    </Button>
+                    <TextBlock Text="Название пресета" IsHitTestVisible="False" Foreground="{DynamicResource SubTextBrush}" FontSize="11" Margin="10,0" VerticalAlignment="Center">
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                          <Setter Property="Visibility" Value="Collapsed" />
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding Text, ElementName=CustomName}" Value="">
+                              <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
+                  </Grid>
+                  <StackPanel Margin="0,2,0,0">
+                    <StackPanel>
+                      <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="*" />
+                          <ColumnDefinition Width="8" />
+                          <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button Style="{StaticResource GhostButton}" Click="ImportPresets_Click" ToolTip="Открывает файл с пресетами и добавляет настройки в вашу коллекцию. Подходит для переноса с другого компьютера." Padding="8,7">
+                          <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+                            <TextBlock Text="Импорт" Margin="8,0,0,0" />
+                          </StackPanel>
+                        </Button>
+                        <Button Grid.Column="2" Style="{StaticResource GhostButton}" Click="ExportPresets_Click" ToolTip="Сохраняет ваши пресеты в отдельный файл для резервной копии или переноса. Аудиозаписи в этот файл не входят." Padding="8,7">
+                          <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+                            <TextBlock Text="Экспорт" Margin="8,0,0,0" />
+                          </StackPanel>
+                        </Button>
+                      </Grid>
+                      <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="*" />
+                          <ColumnDefinition Width="8" />
+                          <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button Style="{StaticResource GhostButton}" Click="ShareCode_Click" ToolTip="Создаёт короткий код текущих настроек звука, который можно отправить другому пользователю SoundShot." Padding="8,7">
+                          <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+                            <TextBlock Text="Поделиться" Margin="8,0,0,0" />
+                          </StackPanel>
+                        </Button>
+                        <Button Grid.Column="2" Style="{StaticResource GhostButton}" Click="EnterCode_Click" ToolTip="Добавляет звуковой пресет из полученного кода. Вставьте код и задайте понятное имя." Padding="8,7">
+                          <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+                            <TextBlock Text="Ввести код" Margin="8,0,0,0" />
+                          </StackPanel>
+                        </Button>
+                      </Grid>
+                      <Button Style="{StaticResource AccentButton}" Margin="0,8,0,0" HorizontalAlignment="Stretch" Click="AutoEq_Click" ToolTip="Открывает поиск готовой коррекции для модели наушников. Выберите точную модель, затем сравните звучание с обработкой и без неё." Padding="8,7">
+                        <StackPanel Orientation="Horizontal">
+                          <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+                          <TextBlock Text="Пресет под мои наушники" Margin="8,0,0,0" />
+                        </StackPanel>
+                      </Button>
+                    </StackPanel>
+                  </StackPanel>
+                </StackPanel>
+              </Grid>
+            </Border>
+            <Border Style="{StaticResource CompactCard}" Padding="12" Margin="0" Grid.Row="1">
+              <StackPanel>
+                <TextBlock x:Name="PadCardTitle" Style="{StaticResource CardTitle}" Text="АМБУШЮРЫ" Margin="0,0,0,8" />
+                <!-- what this device is: remembered per device -->
+                <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4" Margin="0,0,0,10">
+                  <UniformGrid Columns="2">
+                    <RadioButton x:Name="KindHeadphones" GroupName="Kind" Style="{StaticResource Segment}" Tag="Headphones" Checked="Kind_Checked" ToolTip="Выберите для наушников. Ниже можно указать материал амбушюр, чтобы подобрать соответствующую настройку заводского режима.">
+                      <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+                        <TextBlock Text="Наушники" Margin="6,0,0,0" />
+                      </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="KindSpeakers" GroupName="Kind" Style="{StaticResource Segment}" Tag="Speakers" Checked="Kind_Checked" ToolTip="Выберите для колонок. Настройки амбушюр не используются: они относятся только к наушникам.">
+                      <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+                        <TextBlock Text="Колонки" Margin="6,0,0,0" />
+                      </StackPanel>
+                    </RadioButton>
+                  </UniformGrid>
+                </Border>
+                <Border x:Name="PadSelector" Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4">
+                  <UniformGrid Columns="3">
+                    <RadioButton x:Name="PadFabric" GroupName="Pad" Style="{StaticResource Segment}" Content="Ткань" Tag="Fabric" Checked="Pad_Checked" ToolTip="Амбушюры из ткани. Выберите свой материал: он влияет на настройку заводского режима. Это не настройка громкости." />
+                    <RadioButton x:Name="PadLeatherette" GroupName="Pad" Style="{StaticResource Segment}" Content="Кожзам" Tag="Leatherette" Checked="Pad_Checked" ToolTip="Амбушюры из кожи или кожзама. При выборе загружается соответствующая настройка заводского режима." />
+                    <RadioButton x:Name="PadVelour" GroupName="Pad" Style="{StaticResource Segment}" Content="Велюр" Tag="Velour" Checked="Pad_Checked" ToolTip="Велюровые амбушюры. При выборе загружается соответствующая настройка заводского режима." />
+                  </UniformGrid>
+                </Border>
+              </StackPanel>
+            </Border>
+          </Grid>
+        </ScrollViewer>
+        <Grid x:Name="EqEditor">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+          </Grid.RowDefinitions>
+          <!-- Listening modes -->
+          <UniformGrid Grid.Row="0" Columns="3" Margin="0,0,0,12">
+            <RadioButton x:Name="ModeGames" GroupName="Mode" Style="{StaticResource ModeCard}" Tag="Games" Margin="0,0,8,0" Checked="Mode_Checked" ToolTip="Готовая настройка эквалайзера для игр. Применяется сразу. Сравните знакомый игровой эпизод и при необходимости подстройте полосы.">
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="32" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="" FontFamily="{StaticResource IconFont}" FontSize="18" Foreground="{DynamicResource AccentBrush}" />
+                <StackPanel Grid.Column="1">
+                  <TextBlock Text="Игры" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,3" />
+                  <TextBlock x:Name="HkGames" FontSize="11" Foreground="{DynamicResource SubTextBrush}" Opacity="0.7" Margin="0,5,0,0" />
+                </StackPanel>
+              </Grid>
+            </RadioButton>
+            <RadioButton x:Name="ModeMusic" GroupName="Mode" Style="{StaticResource ModeCard}" Tag="Music" Margin="4,0" Checked="Mode_Checked" ToolTip="Готовая настройка эквалайзера для музыки. Применяется сразу. Включите знакомую композицию и оцените звучание на слух.">
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="32" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="" FontFamily="{StaticResource IconFont}" FontSize="18" Foreground="{DynamicResource AccentBrush}" />
+                <StackPanel Grid.Column="1">
+                  <TextBlock Text="Музыка" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,3" />
+                  <TextBlock x:Name="HkMusic" FontSize="11" Foreground="{DynamicResource SubTextBrush}" Opacity="0.7" Margin="0,5,0,0" />
+                </StackPanel>
+              </Grid>
+            </RadioButton>
+            <RadioButton x:Name="ModeMovies" GroupName="Mode" Style="{StaticResource ModeCard}" Tag="Movies" Margin="8,0,0,0" Checked="Mode_Checked" ToolTip="Готовая настройка эквалайзера для фильмов. Применяется сразу. Проверьте разборчивость диалогов и уровень баса на знакомой сцене.">
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="32" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="" FontFamily="{StaticResource IconFont}" FontSize="18" Foreground="{DynamicResource AccentBrush}" />
+                <StackPanel Grid.Column="1">
+                  <TextBlock Text="Фильмы" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,3" />
+                  <TextBlock x:Name="HkMovies" FontSize="11" Foreground="{DynamicResource SubTextBrush}" Opacity="0.7" Margin="0,5,0,0" />
+                </StackPanel>
+              </Grid>
+            </RadioButton>
+          </UniformGrid>
+          <!-- Equalizer -->
+          <Border Grid.Row="1" Style="{StaticResource CompactCard}" Margin="0" Padding="16,14">
+            <Grid>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Margin="0,0,12,0">
+                  <TextBlock Text="Эквалайзер" FontSize="19" FontWeight="SemiBold" />
+                  <TextBlock x:Name="PresetTitle" Margin="0,3,0,0" Foreground="{DynamicResource SubTextBrush}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock x:Name="ClipInfo" Margin="0,4,0,0" FontSize="12" Foreground="{DynamicResource WarnBrush}" Visibility="Collapsed" TextWrapping="Wrap" />
+                </StackPanel>
+                <CheckBox x:Name="EqSwitch" Style="{StaticResource Switch}" Content="Включён" Click="EqSwitch_Click" ToolTip="Включает или отключает эквалайзер. Положения полос сохраняются. Выключите и включите, чтобы услышать разницу; остальные эффекты управляются отдельно." Grid.Column="1" VerticalAlignment="Top" />
+              </Grid>
+              <Grid Grid.Row="1" Margin="0,10,0,8">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="44" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <!-- dB scale, rows match the bands grid -->
+                <Grid>
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="26" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="26" />
+                  </Grid.RowDefinitions>
+                  <Grid Grid.Row="1" Margin="0,0,0,0">
+                    <TextBlock Text="+20" VerticalAlignment="Top" FontSize="11" Foreground="{DynamicResource SubTextBrush}" Margin="0,0,0,0" />
+                    <TextBlock Text="0 дБ" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource SubTextBrush}" />
+                    <TextBlock Text="−20" VerticalAlignment="Bottom" FontSize="11" Foreground="{DynamicResource SubTextBrush}" />
+                  </Grid>
+                </Grid>
+                <Grid x:Name="BandsGrid" Grid.Column="1">
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="26" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="26" />
+                  </Grid.RowDefinitions>
+                </Grid>
+                <!-- shown for headsets without the C-Media equalizer -->
+                <Border x:Name="EqUnavailable" Grid.ColumnSpan="2" Visibility="Collapsed" Background="{DynamicResource CardBrush}" CornerRadius="12" Opacity="0.96">
+                  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="460" Margin="0,8">
+                      <Border x:Name="EqUnavailableIcon" Width="52" Height="52" CornerRadius="14" Background="{DynamicResource InsetBrush}" HorizontalAlignment="Center">
+                        <TextBlock Text="" FontFamily="{StaticResource IconFont}" FontSize="22" Foreground="{DynamicResource SubTextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                      </Border>
+                      <TextBlock Text="Эквалайзер недоступен для этих наушников" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,14,0,6" />
+                      <TextBlock x:Name="EqUnavailableText" TextAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource SubTextBrush}" Text="Для эквалайзера нужен совместимый драйвер или Equalizer APO. Громкость, микрофон и анализатор доступны и без него." />
+                      <!-- one-click official driver install for io Graphite headsets -->
+                      <StackPanel x:Name="DriverOffer" Visibility="Collapsed" Margin="0,18,0,0">
+                        <TextBlock TextAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold" Text="Похоже, не установлен драйвер наушников. Установить его с официального сайта IO?" />
+                        <Grid Margin="0,12,0,0">
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="Auto" />
+                          </Grid.ColumnDefinitions>
+                          <ComboBox x:Name="DriverModelCombo" DisplayMemberPath="Title" />
+                          <Button x:Name="DriverInstallButton" Grid.Column="2" Style="{StaticResource AccentButton}" Click="DriverInstall_Click" ToolTip="Запускает установку драйвера для выбранной модели наушников. Выбирайте свою модель; дальнейшие шаги будут показаны в установщике.">
+                            <TextBlock x:Name="DriverInstallText" Text="Установить драйвер" />
+                          </Button>
+                        </Grid>
+                        <TextBlock x:Name="DriverStatus" Margin="0,10,0,0" TextAlignment="Center" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource SubTextBrush}" Text="Для Graphite 2 Wireless FE драйвера у производителя нет — для неё подойдёт вариант ниже." />
+                      </StackPanel>
+                      <!-- Equalizer APO: equalizer for any headphones -->
+                      <Border x:Name="ApoOffer" Visibility="Collapsed" Margin="0,18,0,0" Padding="16,14" CornerRadius="12" Background="{DynamicResource InsetBrush}">
+                        <StackPanel>
+                          <TextBlock x:Name="ApoTitle" TextAlignment="Center" FontWeight="SemiBold" TextWrapping="Wrap" Text="Эквалайзер для любых наушников" />
+                          <TextBlock x:Name="ApoText" Margin="0,6,0,12" TextAlignment="Center" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource SubTextBrush}" Text="SoundShot поставит бесплатный Equalizer APO и будет управлять им сам. В его окне один раз отметьте свои наушники, потом перезагрузите компьютер." />
+                          <Button x:Name="ApoButton" Style="{StaticResource AccentButton}" HorizontalAlignment="Center" MinWidth="220" Click="ApoButton_Click" ToolTip="Открывает настройку эквалайзера для выбранного устройства. Инструкция над кнопкой показывает, требуется установка или выбор устройства в Equalizer APO.">
+                            <TextBlock x:Name="ApoButtonText" Text="Включить эквалайзер" />
+                          </Button>
+                        </StackPanel>
+                      </Border>
+                    </StackPanel>
+                  </ScrollViewer>
+                </Border>
+              </Grid>
+              <WrapPanel Grid.Row="2">
+                <StackPanel Orientation="Horizontal" Margin="0,0,12,6">
+                  <Button x:Name="ResetButton" Style="{StaticResource GhostButton}" Click="Reset_Click" ToolTip="Возвращает заводские значения текущего режима «Игры», «Музыка» или «Фильмы». Для пользовательского пресета эта кнопка недоступна. Свой вариант можно сохранить отдельным пресетом.">
+                    <StackPanel Orientation="Horizontal" Margin="0">
+                      <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+                      <TextBlock Text="Сбросить пресет" Margin="8,0,0,0" />
+                    </StackPanel>
+                  </Button>
+                  <Button x:Name="FlatButton" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="Flat_Click" ToolTip="Устанавливает все полосы эквалайзера на 0 дБ: частоты не усиливаются и не ослабляются. Другие звуковые эффекты не выключает.">
+                    <StackPanel Orientation="Horizontal" Margin="0">
+                      <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+                      <TextBlock Text="Ровно" Margin="8,0,0,0" />
+                    </StackPanel>
+                  </Button>
+                  <Button x:Name="CompareButton" Style="{StaticResource GhostButton}" Margin="8,0,0,0" PreviewMouseLeftButtonDown="Compare_Down" PreviewMouseLeftButtonUp="Compare_Up" MouseLeave="Compare_Leave" ToolTip="Удерживайте кнопку, чтобы временно услышать звук без эквалайзера и эффектов. Отпустите — вернётся обработка. Сравнивайте один и тот же фрагмент музыки.">
+                    <StackPanel Orientation="Horizontal" Margin="0">
+                      <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+                      <TextBlock x:Name="CompareText" Text="Сравнить" Margin="8,0,0,0" />
+                    </StackPanel>
+                  </Button>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6" VerticalAlignment="Center">
+                  <CheckBox x:Name="AnalyzerSwitch" Style="{StaticResource Switch}" Content="Анализатор звука" Margin="0,0,16,0" Click="AnalyzerSwitch_Click" ToolTip="Показывает частоты звука выбранного устройства в реальном времени. Слева бас, в середине средние частоты, справа высокие. Чем выше столбик, тем сильнее эта часть сигнала.&#xA;&#xA;Включите музыку, чтобы увидеть движение. Анализатор не меняет звук и не сохраняет аудиофайл. Шкала дБ на графике относится к настройке эквалайзера, а не к столбикам." />
+                  <CheckBox x:Name="ClipGuardSwitch" Style="{StaticResource Switch}" Content="Защита от перегруза" Margin="0" Click="ClipGuardSwitch_Click" ToolTip="Когда вы усиливаете частоты, защита снижает общий уровень эквалайзера, чтобы уменьшить перегруз. Звук может стать тише — это ожидаемо. Проверьте на громком фрагменте музыки." />
+                </StackPanel>
+              </WrapPanel>
+            </Grid>
+          </Border>
+        </Grid>
+      </Grid>
+      <Grid x:Name="PageEffects" Grid.Row="2" Visibility="Collapsed">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid Margin="0,0,0,10">
+          <TextBlock Text="Звуковые эффекты" FontSize="19" FontWeight="SemiBold" VerticalAlignment="Center" ToolTip="Общая настройка эффектов для выбранного устройства. Изменения применяются сразу. Переключение режима эквалайзера не меняет эффекты." />
+          <Button x:Name="ResetEffectsButton" Style="{StaticResource GhostButton}" Click="ResetEffects_Click" ToolTip="Выключает эффекты вывода и возвращает их регуляторы к стандартным значениям. Полосы эквалайзера настраиваются отдельно." HorizontalAlignment="Right">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+              <TextBlock Text="Стандартные" Margin="8,0,0,0" />
+            </StackPanel>
+          </Button>
+        </Grid>
+        <ScrollViewer x:Name="EffectsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel>
+            <TextBlock x:Name="EffectsEmpty" Visibility="Collapsed" Margin="2,4,0,12" TextWrapping="Wrap" Foreground="{DynamicResource SubTextBrush}" Text="У этих наушников нет встроенных эффектов C-Media. Проверка каналов ниже работает с любыми наушниками." />
+            <UniformGrid x:Name="OutputEffectsGrid" Columns="3" Margin="-6,0" VerticalAlignment="Top" />
+            <!-- Channel test -->
+            <Border Margin="0,6,0,0">
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="ChannelTestText" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="12,0" Text="Короткий звук по очереди из каждого канала" Grid.Column="0" VerticalAlignment="Center" ToolTip="Проверяет, с какой стороны слышен каждый канал. Включите проверку, чтобы убедиться, что наушники надеты правильно. Для виртуального 7.1 результат зависит от включённых эффектов." />
+                <Button x:Name="ChannelTestButton" Grid.Column="1" Style="{StaticResource AccentButton}" VerticalAlignment="Center" Click="ChannelTest_Click" ToolTip="Воспроизводит короткий тестовый шум по каналам, чтобы проверить, с какой стороны слышен звук. Повторное нажатие останавливает проверку.">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="ChannelTestIcon" Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="ChannelTestButtonText" Text="Проверить каналы" Margin="8,0,0,0" />
+                  </StackPanel>
+                </Button>
+              </Grid>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+      <ScrollViewer x:Name="PageMic" Grid.Row="2" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel>
+          <Border Style="{StaticResource CompactCard}" Padding="20,18">
+            <StackPanel>
+              <Grid>
+                <StackPanel>
+                  <TextBlock Text="Микрофон" FontSize="19" FontWeight="SemiBold" />
+                  <ComboBox x:Name="MicDeviceCombo" Margin="0,12,0,0" HorizontalAlignment="Stretch" AutomationProperties.Name="Микрофон для настройки" DisplayMemberPath="Label" ToolTip="Выберите микрофон, который хотите настраивать и слушать здесь. Это не меняет выбор микрофона внутри Discord, игры или другого приложения — там проверьте его отдельно." SelectionChanged="MicDeviceCombo_SelectionChanged" />
+                  <TextBlock x:Name="MicName" Margin="0,8,0,0" Foreground="{DynamicResource SubTextBrush}" Text="Поиск микрофона…" TextWrapping="Wrap" />
+                </StackPanel>
+              </Grid>
+              <Grid Margin="0,18,0,0">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ToggleButton x:Name="MicMuteButton" Style="{StaticResource IconToggle}" Click="MicMute_Click" ToolTip="Выключить микрофон" IsEnabled="False">
+                  <TextBlock x:Name="MicMuteIcon" Text="" FontFamily="{StaticResource IconFont}" FontSize="15" />
+                </ToggleButton>
+                <Slider x:Name="MicVolumeSlider" Grid.Column="1" Style="{StaticResource VolumeSlider}" Margin="12,0" AutomationProperties.Name="Громкость входа в Windows" ToolTip="Громкость входа выбранного микрофона в Windows. Говорите обычным голосом и смотрите на индикатор уровня. Если он часто достигает красной зоны, уменьшите значение." VerticalAlignment="Center" ValueChanged="MicVolume_ValueChanged" IsEnabled="False" />
+                <TextBlock x:Name="MicVolumeText" Grid.Column="2" Text="—" Width="44" TextAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold" />
+              </Grid>
+              <TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Text="Громкость входа в Windows. Скажите несколько слов и проверьте, чтобы уровень на громких слогах оставался ниже 0 дБ." />
+              <Grid Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Уровень" FontSize="12" Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center" Width="46" />
+                <Border x:Name="MicMeterTrack" Grid.Column="1" Height="10" CornerRadius="5" Background="{DynamicResource TrackBrush}" Margin="0,0,12,0">
+                  <Border x:Name="MicMeterFill" HorizontalAlignment="Left" Width="0" CornerRadius="5">
+                    <Border.Background>
+                      <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Color="#3DDC97" Offset="0" />
+                        <GradientStop Color="#3DDC97" Offset="0.6" />
+                        <GradientStop Color="#F5A524" Offset="0.85" />
+                        <GradientStop Color="#FF4860" Offset="1" />
+                      </LinearGradientBrush>
+                    </Border.Background>
+                  </Border>
+                </Border>
+                <TextBlock x:Name="MicMeterText" Grid.Column="2" Width="64" TextAlignment="Right" FontSize="12" Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center" Text="—" />
+              </Grid>
+            </StackPanel>
+          </Border>
+          <UniformGrid x:Name="MicEffectsGrid" Columns="2" Margin="-6,0" VerticalAlignment="Top" />
+          <!-- RNNoise via Equalizer APO: noise suppression for any microphone -->
+          <Border x:Name="NrCard" Style="{StaticResource CompactCard}" Margin="0,6,0,0" Padding="18,16">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <Border Width="38" Height="38" CornerRadius="10" Background="{DynamicResource InsetBrush}" VerticalAlignment="Top">
+                <TextBlock Text="" FontFamily="{StaticResource IconFont}" FontSize="17" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+              <StackPanel Grid.Column="1" Margin="12,0">
+                <TextBlock Text="Шумоподавление для любого микрофона" FontSize="15" FontWeight="SemiBold" />
+                <TextBlock x:Name="NrText" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,3,0,0" />
+              </StackPanel>
+              <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                <CheckBox x:Name="NrSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" AutomationProperties.Name="Шумоподавление RNNoise" Click="NrSwitch_Click" Visibility="Collapsed" ToolTip="Шумоподавление уменьшает постоянный фоновый шум микрофона. Включите «Слышать себя» в наушниках и сравните речь с обработкой и без неё. При сильном шуме голос тоже может измениться." />
+                <Button x:Name="NrButton" Style="{StaticResource AccentButton}" Click="NrButton_Click" Visibility="Collapsed" ToolTip="Подготовка шумоподавления для выбранного микрофона. Кнопка откроет нужный шаг установки или настройки; пояснение рядом показывает текущий статус.">
+                  <TextBlock x:Name="NrButtonText" />
+                </Button>
+              </StackPanel>
+            </Grid>
+          </Border>
+          <Border Style="{StaticResource CompactCard}" Margin="0,6,0,0" Padding="18,16">
+            <StackPanel>
+              <TextBlock Text="Обработка голоса" FontSize="15" FontWeight="SemiBold" />
+              <TextBlock x:Name="MicVoiceStatus" Margin="0,6,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" />
+              <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="12,10" Margin="0,12,0,0">
+                <StackPanel>
+                  <WrapPanel VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,24,4">
+                      <CheckBox x:Name="MonitorSwitch" Style="{StaticResource Switch}" VerticalAlignment="Center" AutomationProperties.Name="Слышать себя" Click="MonitorSwitch_Click" IsEnabled="False" ToolTip="Позволяет услышать выбранный микрофон в устройстве вывода и оценить настройки. Используйте наушники, чтобы избежать свиста из колонок. Небольшая задержка прослушивания возможна." />
+                      <TextBlock Text="Слышать себя" VerticalAlignment="Center" Margin="8,0,0,0" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                      <CheckBox x:Name="MicVoiceSwitch" Style="{StaticResource Switch}" VerticalAlignment="Center" AutomationProperties.Name="Коррекция голоса" Click="MicVoiceSwitch_Click" IsEnabled="False" ToolTip="Включает обработку тембра и усиления микрофона. Регуляторы сохраняются при выключении. Для сравнения включите «Слышать себя» и повторите одну фразу с коррекцией и без неё." />
+                      <TextBlock Text="Коррекция" VerticalAlignment="Center" Margin="8,0,0,0" />
+                    </StackPanel>
+                  </WrapPanel>
+                  <TextBlock FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0" Text="Наденьте наушники, включите «Слышать себя» и повторите одну фразу с включённой и выключенной коррекцией. Значения регуляторов сохраняются." />
+                </StackPanel>
+              </Border>
+              <StackPanel x:Name="MicVoiceControls" IsEnabled="False" Margin="0,12,0,0">
+                <UniformGrid Columns="3" Margin="0,0,0,10">
+                  <Button Style="{StaticResource GhostButton}" Margin="0,0,4,0" Content="Чёткая речь" Tag="Speech" ToolTip="Подчёркивает согласные и убирает низкий гул." Click="MicVoicePreset_Click" />
+                  <Button Style="{StaticResource GhostButton}" Margin="4,0" Content="Мягкий голос" Tag="Soft" ToolTip="Смягчает резкие высокие и оставляет согласные слышимыми." Click="MicVoicePreset_Click" />
+                  <Button Style="{StaticResource GhostButton}" Margin="4,0,0,0" Content="Сбросить" Tag="Reset" ToolTip="Возвращает регуляторы к исходным значениям." Click="MicVoicePreset_Click" />
+                </UniformGrid>
+                <Grid TextElement.FontSize="13">
+                  <Grid.Resources>
+                    <Style x:Key="MicVoiceHint" TargetType="TextBlock">
+                      <Setter Property="FontSize" Value="12" />
+                      <Setter Property="Foreground" Value="{DynamicResource SubTextBrush}" />
+                      <Setter Property="TextWrapping" Value="Wrap" />
+                      <Setter Property="Margin" Value="0,0,0,6" />
+                    </Style>
+                  </Grid.Resources>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="146" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="58" />
+                  </Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="31" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="31" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="31" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                  </Grid.RowDefinitions>
+                  <TextBlock Text="Усиление" VerticalAlignment="Center" />
+                  <Slider x:Name="MicVoiceGain" Grid.Column="1" Style="{StaticResource VolumeSlider}" VerticalAlignment="Center" Minimum="-12" Maximum="12" TickFrequency="1" IsSnapToTickEnabled="True" SmallChange="1" LargeChange="3" AutomationProperties.Name="Усиление микрофона в децибелах" ValueChanged="MicVoice_Changed" ToolTip="Дополнительное усиление в обработке микрофона, в децибелах. Плюс делает голос громче, минус тише. Слишком большое усиление может дать хрип; сравнивайте обычную речь." />
+                  <TextBlock Grid.Column="2" Text="{Binding ElementName=MicVoiceGain, Path=Value, StringFormat={}{0:+0;-0;0} дБ}" TextAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}" />
+                  <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Style="{StaticResource MicVoiceHint}" Text="Меняет громкость всего сигнала. Если речь тихая, попробуйте +3 дБ. Если голос хрипит на громких словах, уменьшите усиление." />
+                  <TextBlock Grid.Row="2" Text="Разборчивость" VerticalAlignment="Center" />
+                  <Slider x:Name="MicVoiceClarity" Grid.Row="2" Grid.Column="1" Style="{StaticResource VolumeSlider}" VerticalAlignment="Center" Minimum="-6" Maximum="6" TickFrequency="1" IsSnapToTickEnabled="True" SmallChange="1" LargeChange="2" AutomationProperties.Name="Разборчивость голоса" ToolTip="Разборчивость речи: усиливает или ослабляет область около 3 кГц, где слышны согласные. Плюс может сделать речь чётче, но слишком большое значение — резкой." ValueChanged="MicVoice_Changed" />
+                  <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding ElementName=MicVoiceClarity, Path=Value, StringFormat={}{0:+0;-0;0} дБ}" TextAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}" />
+                  <TextBlock Grid.Row="3" Grid.ColumnSpan="3" Style="{StaticResource MicVoiceHint}" Text="Выделяет согласные около 3 кГц. Попробуйте +2 дБ, если окончания слов плохо слышны." />
+                  <TextBlock Grid.Row="4" Text="Высокие частоты" VerticalAlignment="Center" />
+                  <Slider x:Name="MicVoiceTreble" Grid.Row="4" Grid.Column="1" Style="{StaticResource VolumeSlider}" VerticalAlignment="Center" Minimum="-6" Maximum="6" TickFrequency="1" IsSnapToTickEnabled="True" SmallChange="1" LargeChange="2" AutomationProperties.Name="Высокие частоты голоса" ToolTip="Высокие частоты голоса, начиная примерно с 6,5 кГц. Плюс добавляет яркости, минус смягчает шипящие «с» и «ш». Проверяйте на одной и той же фразе." ValueChanged="MicVoice_Changed" />
+                  <TextBlock Grid.Row="4" Grid.Column="2" Text="{Binding ElementName=MicVoiceTreble, Path=Value, StringFormat={}{0:+0;-0;0} дБ}" TextAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}" />
+                  <TextBlock Grid.Row="5" Grid.ColumnSpan="3" Style="{StaticResource MicVoiceHint}" Text="Меняет яркость в верхней части голоса. Попробуйте −2 дБ, если «с» и «ш» звучат резко." />
+                  <TextBlock Grid.Row="6" Text="Срез низких частот" VerticalAlignment="Center" />
+                  <ComboBox x:Name="MicVoiceHighPass" Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,3,0,3" SelectedValuePath="Tag" SelectedIndex="0" AutomationProperties.Name="Срез низких частот" ToolTip="Убирает низкий гул и вибрации стола. Более высокая граница сильнее срезает низкие частоты, но может сделать голос тоньше. Начните с небольшого значения и послушайте результат." SelectionChanged="MicVoice_Changed">
+                    <ComboBoxItem Content="Выключен" Tag="0" />
+                    <ComboBoxItem Content="60 Гц" Tag="60" />
+                    <ComboBoxItem Content="80 Гц" Tag="80" />
+                    <ComboBoxItem Content="100 Гц" Tag="100" />
+                    <ComboBoxItem Content="120 Гц" Tag="120" />
+                    <ComboBoxItem Content="160 Гц" Tag="160" />
+                    <ComboBoxItem Content="200 Гц" Tag="200" />
+                  </ComboBox>
+                  <TextBlock Grid.Row="7" Grid.ColumnSpan="3" Style="{StaticResource MicVoiceHint}" Margin="0,3,0,0" Text="Ослабляет гул и вибрации. Начните с 80 Гц. Чем выше значение, тем меньше баса останется в голосе." />
+                </Grid>
+              </StackPanel>
+              <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="12,10" Margin="0,12,0,0">
+                <StackPanel>
+                  <DockPanel Margin="0,0,0,6">
+                    <TextBlock x:Name="MicVoicePlotReadout" DockPanel.Dock="Right" FontSize="12" Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="Изменение по частотам" FontSize="13" FontWeight="SemiBold" />
+                  </DockPanel>
+                  <Canvas x:Name="MicVoicePlot" Height="122" Background="Transparent" ClipToBounds="True" AutomationProperties.Name="Расчётное изменение громкости по частотам" SizeChanged="MicVoicePlot_SizeChanged" MouseMove="MicVoicePlot_MouseMove" MouseLeave="MicVoicePlot_MouseLeave">
+                    <Canvas x:Name="MicVoicePlotLabels" IsHitTestVisible="False" />
+                    <Path x:Name="MicVoicePlotGrid" Stroke="{DynamicResource CardBorderBrush}" IsHitTestVisible="False" />
+                    <Path x:Name="MicVoicePlotZero" Stroke="{DynamicResource SubTextBrush}" StrokeDashArray="4 4" Opacity="0.55" IsHitTestVisible="False" />
+                    <Path x:Name="MicVoicePlotFill" Fill="{DynamicResource CurveFillBrush}" IsHitTestVisible="False" />
+                    <Path x:Name="MicVoicePlotCurve" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeLineJoin="Round" IsHitTestVisible="False" />
+                    <Line x:Name="MicVoicePlotCursor" Stroke="{DynamicResource SubTextBrush}" Opacity="0.65" Visibility="Collapsed" IsHitTestVisible="False" />
+                  </Canvas>
+                  <TextBlock FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0" Text="Расчёт по регуляторам. Выше 0 дБ — усиление, ниже — ослабление. Наведите курсор, чтобы увидеть частоту и изменение в дБ." />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </Border>
+          <TextBlock Margin="4,4,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" x:Name="MicHotkeyText" />
+        </StackPanel>
+      </ScrollViewer>
+      <Popup x:Name="MixerPopup" PlacementTarget="{Binding ElementName=MixerOpenButton}" Placement="Bottom" VerticalOffset="8" StaysOpen="False" AllowsTransparency="True" Opened="MixerPopup_Opened">
+        <Border Width="610" MaxHeight="420" Padding="16" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" CornerRadius="12" KeyDown="MixerPopup_KeyDown">
+          <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid Margin="0,0,0,12">
+              <TextBlock Text="Громкость программ" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" ToolTip="Настройте звук каждой программы на выбранном устройстве. Уровни запоминаются и восстанавливаются при следующем запуске программы." />
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="MixerRefreshButton" Style="{StaticResource GhostButton}" Content="Обновить" Click="MixerRefresh_Click" ToolTip="Ищет программы, воспроизводящие звук на выбранном устройстве. Если программы нет, включите в ней звук и обновите список." />
+                <Button Style="{StaticResource GhostButton}" Margin="6,0,0,0" Padding="10,6" Click="MixerClose_Click" AutomationProperties.Name="Закрыть микшер" ToolTip="Закрыть панель громкости. Также можно нажать Esc или щёлкнуть снаружи.">
+                  <TextBlock Text="" FontFamily="{StaticResource IconFont}" />
+                </Button>
+              </StackPanel>
+            </Grid>
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+              <StackPanel>
+                <StackPanel x:Name="MixerList" />
+                <TextBlock x:Name="MixerEmpty" Margin="4" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Visibility="Collapsed" Text="Сейчас здесь нет программ со звуком. Включите музыку, игру или видео и нажмите «Обновить»." />
+              </StackPanel>
+            </ScrollViewer>
+          </Grid>
+        </Border>
+      </Popup>
+      <ScrollViewer x:Name="PageRecord" Grid.Row="2" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel>
+          <!-- status + actions -->
+          <Border Style="{StaticResource CompactCard}" Padding="20,18">
+            <StackPanel>
+              <Grid>
+                <StackPanel Margin="0,0,80,0">
+                  <TextBlock Text="Повторы и запись экрана" FontSize="19" FontWeight="SemiBold" />
+                  <TextBlock x:Name="RecStatus" Margin="0,3,0,0" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+                <CheckBox x:Name="ReplaySwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Top" Click="ReplaySwitch_Click" ToolTip="Непрерывно накапливает последние минуты выбранных мониторов во временном буфере на диске. После интересного момента нажмите «Сохранить повтор». После включения буферу нужно время, чтобы заполниться." />
+              </Grid>
+              <Grid Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="10" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="10" />
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="10" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Button x:Name="SaveReplayButton" Style="{StaticResource AccentButton}" Click="SaveReplay_Click" ToolTip="Сохраняет уже накопленный фрагмент до нажатия кнопки. Если прошло меньше выбранной длительности, ролик будет короче. Для записи будущих событий используйте «Начать запись».">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="SaveReplayText" Text="Сохранить повтор" Margin="8,0,0,0" />
+                  </StackPanel>
+                </Button>
+                <Button x:Name="RecordButton" Grid.Column="2" Style="{StaticResource GhostButton}" Click="Record_Click" ToolTip="Первое нажатие начинает запись с текущего момента. Следующее останавливает её и сохраняет ролик. Это отдельная запись, не сохранение прошлого из буфера.">
+                  <StackPanel Orientation="Horizontal">
+                    <Ellipse x:Name="RecordDot" Width="10" Height="10" Fill="#FF4860" VerticalAlignment="Center" />
+                    <TextBlock x:Name="RecordText" Text="Начать запись" Margin="8,0,0,0" />
+                  </StackPanel>
+                </Button>
+                <Button Grid.Column="4" Style="{StaticResource GhostButton}" Click="Screenshot_Click" ToolTip="Сохраняет один кадр выбранного монитора как изображение PNG в папку записей. Звук в снимок не входит.">
+                  <TextBlock Text="" FontFamily="{StaticResource IconFont}" />
+                </Button>
+                <Button Grid.Column="6" Style="{StaticResource GhostButton}" Click="OpenRecFolder_Click" ToolTip="Открывает папку с сохранёнными роликами и снимками в Проводнике. Файлы сгруппированы по монитору и программе.">
+                  <TextBlock Text="" FontFamily="{StaticResource IconFont}" />
+                </Button>
+              </Grid>
+              <TextBlock x:Name="RecHotkeys" Margin="2,12,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <!-- settings -->
+          <Border Style="{StaticResource CompactCard}" Padding="20,18">
+            <StackPanel>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="16" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                  <StackPanel x:Name="DurationTitle" Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource CardTitle}" Text="ДЛИТЕЛЬНОСТЬ ПОВТОРА" />
+                  </StackPanel>
+                  <ComboBox x:Name="DurationCombo" DisplayMemberPath="Label" ToolTip="Сколько последних секунд или минут хранить для повтора. Это максимальная длина отката, а не ограничение обычной записи. Большая длительность требует больше места для буфера." />
+                  <Grid x:Name="CustomDurationPanel" Visibility="Collapsed" Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="80" />
+                      <ColumnDefinition Width="8" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="8" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="CustomDurationBox" VerticalContentAlignment="Center" KeyDown="CustomDurationBox_KeyDown" ToolTip="Целое число, например 15" />
+                    <ComboBox x:Name="CustomDurationUnit" Grid.Column="2" SelectedIndex="0" ToolTip="Единица длительности повторов: минуты или секунды. После ввода числа нажмите «Применить».">
+                      <ComboBoxItem Content="минут" />
+                      <ComboBoxItem Content="секунд" />
+                    </ComboBox>
+                    <Button Grid.Column="4" Style="{StaticResource AccentButton}" Content="Применить" Click="CustomDuration_Click" ToolTip="Применяет указанное число минут или секунд к буферу повторов. После изменения настройки буфер начинает накапливаться заново." />
+                  </Grid>
+                  <TextBlock x:Name="DurationHint" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="2,6,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                  <StackPanel x:Name="SoundTitle" Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource CardTitle}" Text="ЗВУК В РОЛИКЕ" />
+                  </StackPanel>
+                  <CheckBox x:Name="RecSystemSwitch" Style="{StaticResource Switch}" Content="Звук компьютера" Click="RecSetting_Changed" ToolTip="Добавляет в ролик звук устройства вывода Windows по умолчанию: игру, музыку и другие программы. Если звук идёт через другое устройство, проверьте выбор вывода в Windows." />
+                  <CheckBox x:Name="RecMicSwitch" Style="{StaticResource Switch}" Content="Микрофон" Click="RecSetting_Changed" ToolTip="Добавляет голос с микрофона Windows по умолчанию для связи. Он может отличаться от микрофона, выбранного для настройки на вкладке «Микрофон». Проверьте устройство в Windows перед записью." />
+                </StackPanel>
+              </Grid>
+              <Grid Margin="0,18,0,8">
+                <StackPanel x:Name="MonitorsTitle" Orientation="Horizontal" VerticalAlignment="Center">
+                  <TextBlock Style="{StaticResource CardTitle}" Text="МОНИТОРЫ И КАЧЕСТВО ЗАПИСИ" Margin="0" />
+                </StackPanel>
+                <Button HorizontalAlignment="Right" Style="{StaticResource GhostButton}" Click="IdentifyMonitors_Click" ToolTip="На несколько секунд показывает номер на каждом экране. Сопоставьте его со списком и отметьте мониторы, которые хотите записывать.">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+                    <TextBlock Text="Показать номера" Margin="8,0,0,0" />
+                  </StackPanel>
+                </Button>
+              </Grid>
+              <StackPanel x:Name="MonitorPanel" />
+              <TextBlock x:Name="MonitorHint" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" Margin="2,6,0,0" />
+              <TextBlock Style="{StaticResource CardTitle}" Text="ПАПКА ДЛЯ РОЛИКОВ" Margin="0,16,0,8" />
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="10" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Border Background="{DynamicResource InsetBrush}" CornerRadius="8" Padding="12,8">
+                  <TextBlock x:Name="RecFolderText" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                </Border>
+                <Button Grid.Column="2" Style="{StaticResource GhostButton}" Content="Выбрать…" Click="ChooseRecFolder_Click" ToolTip="Выбирает, куда сохранять ролики и снимки. Временный буфер повторов хранится отдельно; изменение папки не меняет длительность отката." />
+              </Grid>
+              <TextBlock x:Name="RecInfo" Margin="2,14,0,0" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+      <Grid Grid.Row="3" Margin="4,12,0,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <TextBlock x:Name="HotkeysText" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+        <Button Grid.Column="1" Style="{StaticResource GhostButton}" Margin="12,0,0,0" Click="Hotkeys_Click" ToolTip="Открывает назначение клавиш для оверлея, микрофона, повторов и других действий. Здесь можно посмотреть или изменить сочетания.">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+            <TextBlock Text="Горячие клавиши…" Margin="8,0,0,0" />
+          </StackPanel>
+        </Button>
+      </Grid>
+      <ScrollViewer x:Name="PageSettings" Grid.Row="2" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition />
+            <ColumnDefinition Width="14" />
+            <ColumnDefinition />
+          </Grid.ColumnDefinitions>
+          <Border Style="{StaticResource CompactCard}" Grid.Column="0" VerticalAlignment="Top" Margin="0">
+            <StackPanel Margin="0,10,0,0">
+              <TextBlock Text="Оформление" FontWeight="SemiBold" Margin="0,0,0,10" />
+              <StackPanel Margin="0,12,0,0">
+                <Border Background="{DynamicResource InsetBrush}" CornerRadius="10" Padding="4">
+                  <UniformGrid Columns="3">
+                    <RadioButton x:Name="ThemeDark" GroupName="Theme" Style="{StaticResource Segment}" Content="Тёмная" Tag="Dark" Checked="Theme_Checked" ToolTip="Тёмный фон интерфейса. Цвет кнопок и выделений выбирается отдельно ниже." />
+                    <RadioButton x:Name="ThemeLight" GroupName="Theme" Style="{StaticResource Segment}" Content="Светлая" Tag="Light" Checked="Theme_Checked" ToolTip="Светлый фон интерфейса. Цвет кнопок и выделений выбирается отдельно ниже." />
+                    <RadioButton x:Name="ThemeSystem" GroupName="Theme" Style="{StaticResource Segment}" Content="Системная" Tag="System" ToolTip="Фон приложения следует светлому или тёмному оформлению Windows. Ваш цвет кнопок сохраняется отдельно." Checked="Theme_Checked" />
+                  </UniformGrid>
+                </Border>
+                <TextBlock Text="Цвет" FontSize="12" Foreground="{DynamicResource SubTextBrush}" Margin="2,12,0,6" />
+                <UniformGrid x:Name="AccentPanel" Columns="6" MaxWidth="330" HorizontalAlignment="Left" />
+                <StackPanel Margin="0,14,0,0">
+                  <TextBlock Text="Свой цвет кнопок и выделений" FontWeight="SemiBold" Margin="0,0,0,8" />
+                  <WrapPanel>
+                    <Button Style="{StaticResource GhostButton}" Click="ChooseCustomAccent_Click" Margin="0,0,10,6" ToolTip="Открывает палитру собственного цвета кнопок и выделений. Светлая или тёмная тема при этом не меняется.">
+                      <StackPanel Orientation="Horizontal">
+                        <Border x:Name="CustomAccentPreview" Width="18" Height="18" CornerRadius="4" BorderBrush="{DynamicResource SubTextBrush}" BorderThickness="1" Margin="0,0,8,0" />
+                        <TextBlock Text="Выбрать цвет…" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Button>
+                    <TextBox x:Name="CustomAccentBox" Width="100" MaxLength="7" ToolTip="Цвет в формате #RRGGBB" AutomationProperties.Name="Свой цвет в формате HEX" KeyDown="CustomAccentBox_KeyDown" Margin="0,0,8,6" VerticalContentAlignment="Center" />
+                    <Button Content="Применить" Style="{StaticResource GhostButton}" Click="ApplyCustomAccent_Click" Margin="0,0,0,6" ToolTip="Применяет цвет из поля HEX. Формат — # и шесть цифр или букв A–F, например #7C5CFC. Цвет сохраняется после перезапуска." />
+                  </WrapPanel>
+                  <TextBlock x:Name="CustomAccentHint" FontSize="12" Foreground="{DynamicResource SubTextBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource CompactCard}" Grid.Column="2" VerticalAlignment="Top" Margin="0">
+            <StackPanel Margin="0,10,0,0">
+              <TextBlock Text="Настройки приложения" FontWeight="SemiBold" Margin="0,0,0,10" />
+              <StackPanel Margin="0,12,0,0">
+                <CheckBox x:Name="AutostartSwitch" Style="{StaticResource Switch}" Content="Запускать вместе с Windows" Click="AutostartSwitch_Click" ToolTip="Запускает SoundShot при входе в Windows. Приложение сможет работать в фоне без ручного запуска." />
+                <CheckBox x:Name="MinimizeSwitch" Style="{StaticResource Switch}" Content="Сворачивать в трей при закрытии" Click="MinimizeSwitch_Click" ToolTip="Крестик окна будет скрывать приложение в трей, а не завершать его. Фоновая запись продолжит работу. Для полного закрытия выберите «Выход» в меню трея." />
+                <CheckBox x:Name="NotifySwitch" Style="{StaticResource Switch}" Content="Сообщать о смене режима" Click="NotifySwitch_Click" ToolTip="Показывает сообщения о смене режима и других действиях приложения. Способ показа настраивается переключателем подсказки поверх экрана." />
+                <CheckBox x:Name="OsdSwitch" Style="{StaticResource Switch}" Content="Подсказка на экране (поверх игр)" Click="OsdSwitch_Click" ToolTip="Показывает короткие сообщения поверх экрана, например о смене режима. При выключении используются уведомления через трей. Это не игровой оверлей Win+G." />
+                <CheckBox x:Name="MicSoundsSwitch" Style="{StaticResource Switch}" Content="Звук при выключении микрофона" Click="MicSoundsSwitch_Click" ToolTip="Короткий звуковой сигнал при переключении микрофона помогает понять, включён ли он, не открывая окно приложения." />
+                <Button x:Name="AudioCenterAutostartButton" Style="{StaticResource GhostButton}" Margin="0,6,0,6" HorizontalAlignment="Stretch" Click="AudioCenterAutostart_Click" Visibility="Collapsed" ToolTip="Официальный Audio Center запускается с Windows и может перезаписывать ваши настройки звука">
+                  <TextBlock Text="Убрать Audio Center из автозагрузки" />
+                </Button>
+                <CheckBox x:Name="UpdatesSwitch" Style="{StaticResource Switch}" Content="Проверять обновления" Click="UpdatesSwitch_Click" ToolTip="Разрешает проверку доступности новой версии. Установку обновления вы запускаете отдельной кнопкой." />
+                <Grid Margin="0,6,0,0">
+                  <TextBlock x:Name="VersionText" FontSize="12" Foreground="{DynamicResource SubTextBrush}" VerticalAlignment="Center" />
+                  <Button x:Name="CheckUpdateButton" HorizontalAlignment="Right" Style="{StaticResource GhostButton}" Click="CheckUpdate_Click" Content="Проверить" ToolTip="Проверяет, доступна ли новая версия SoundShot. Само нажатие не устанавливает обновление." />
+                </Grid>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+        </Grid>
+      </ScrollViewer>
     </Grid>
+  </Grid>
 </Window>

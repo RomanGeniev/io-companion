@@ -24,6 +24,7 @@ namespace GraphiteCompanion.Audio
             private readonly bool isFloat;
             private readonly int bps;
             private readonly Queue<(float l, float r)> queue = new();
+            public volatile bool Failed;
             private double resamplePos;
             private (float l, float r) prev;
             public readonly float Gain;
@@ -33,12 +34,32 @@ namespace GraphiteCompanion.Audio
                 this.capture = capture;
                 Gain = gain;
                 var f = capture.WaveFormat;
-                channels = f.Channels; srcRate = f.SampleRate; isFloat = f.BitsPerSample == 32; bps = f.BitsPerSample / 8;
+                channels = f.Channels; srcRate = f.SampleRate;
+                isFloat = f.Encoding == WaveFormatEncoding.IeeeFloat ||
+                    f is WaveFormatExtensible extended && extended.SubFormat == new Guid("00000003-0000-0010-8000-00aa00389b71");
+                bps = f.BitsPerSample / 8;
+                if (channels < 1 || srcRate < 1 || (isFloat ? bps != 4 : bps is < 1 or > 4))
+                    throw new NotSupportedException("Unsupported recording audio format: " + f);
                 capture.DataAvailable += OnData;
+                capture.RecordingStopped += (_, e) =>
+                {
+                    if (e.Exception != null) { Failed = true; GraphiteCompanion.Services.SettingsStore.LogError(e.Exception); }
+                };
                 capture.StartRecording();
             }
 
-            private float Sample(byte[] b, int at) => isFloat ? BitConverter.ToSingle(b, at) : BitConverter.ToInt16(b, at) / 32768f;
+            private float Sample(byte[] b, int at)
+            {
+                float value = isFloat ? BitConverter.ToSingle(b, at) : bps switch
+                {
+                    1 => (b[at] - 128) / 128f,
+                    2 => BitConverter.ToInt16(b, at) / 32768f,
+                    3 => ((b[at] | b[at + 1] << 8 | b[at + 2] << 16) << 8 >> 8) / 8388608f,
+                    4 => BitConverter.ToInt32(b, at) / 2147483648f,
+                    _ => 0
+                };
+                return float.IsFinite(value) ? value : 0;
+            }
 
             /// <summary>
             /// Any layout → stereo. Headsets with virtual 7.1 make Windows mix in 8 channels
@@ -144,7 +165,14 @@ namespace GraphiteCompanion.Audio
             public void Post(byte[] data)
             {
                 if (Dead || queue.IsAddingCompleted) return;
-                if (!queue.TryAdd(data)) Dead = true; // ffmpeg hung for 10 s: give up on it
+                if (!queue.TryAdd(data))
+                {
+                    // Do not silently abandon an OPEN PCM pipe: FFmpeg then waits
+                    // forever for audio while retaining video frames in memory.
+                    Dead = true;
+                    Close();
+                    ThreadPool.QueueUserWorkItem(_ => { try { Stream.Dispose(); } catch { } });
+                }
             }
 
             public void Close() { try { queue.CompleteAdding(); } catch { } }
@@ -160,6 +188,7 @@ namespace GraphiteCompanion.Audio
                     }
                 }
                 catch { Dead = true; } // ffmpeg exited
+                finally { try { Stream.Dispose(); } catch { } }
             }
         }
 
@@ -167,6 +196,7 @@ namespace GraphiteCompanion.Audio
         private readonly List<Output> outputs = new();
         private readonly Thread pump;
         private volatile bool running = true;
+        public bool Failed => sources.Exists(s => s.Failed);
 
         /// <summary>For tests: mix the given captures instead of the Windows devices.</summary>
         public RecordingAudio(IEnumerable<IWaveIn> captures)
@@ -178,16 +208,16 @@ namespace GraphiteCompanion.Audio
 
         public RecordingAudio(bool systemSound, bool microphone)
         {
-            var en = new MMDeviceEnumerator();
+            using var en = new MMDeviceEnumerator();
             if (systemSound)
             {
                 try { sources.Add(new Source(new LoopbackCapture(en.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia)), 1f)); }
-                catch { }
+                catch (Exception ex) { GraphiteCompanion.Services.SettingsStore.LogError(ex); }
             }
             if (microphone)
             {
                 try { sources.Add(new Source(new WasapiCapture(en.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications), true, 20), 1f)); }
-                catch { }
+                catch (Exception ex) { GraphiteCompanion.Services.SettingsStore.LogError(ex); }
             }
             pump = new Thread(Pump) { IsBackground = true, Name = "RecordingAudio", Priority = ThreadPriority.AboveNormal };
             pump.Start();

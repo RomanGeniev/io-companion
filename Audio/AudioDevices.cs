@@ -9,6 +9,7 @@ namespace GraphiteCompanion.Audio
     {
         public string Id { get; init; } = "";
         public string Name { get; init; } = "";
+        public Guid? ContainerId { get; init; }
         public bool HasCmEq { get; init; }
         public override string ToString() => Name;
     }
@@ -17,6 +18,9 @@ namespace GraphiteCompanion.Audio
     {
         private static readonly PropertyKey FriendlyNameKey =
             new(new Guid("a45c254e-df1c-4efd-8020-67d146a850e0"), 14);
+        private static readonly PropertyKey ContainerIdKey =
+            new(new Guid("8c7ed206-3f8a-4827-8846-1d61deb04b73"), 2);
+        private static readonly Guid SystemContainer = new("00000000-0000-0000-ffff-ffffffffffff");
 
         private static readonly Type EnumeratorType =
             Type.GetTypeFromCLSID(new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E"))!;
@@ -33,12 +37,47 @@ namespace GraphiteCompanion.Audio
         public static List<AudioDeviceInfo> ListActiveInputs() => ListActive(Native.DataFlowCapture, probeEq: false);
 
         /// <summary>Finds the microphone that belongs to the same headset as the given output device.</summary>
-        public static AudioDeviceInfo? FindMatchingInput(AudioDeviceInfo output)
+        internal static AudioDeviceInfo? FindMatchingInput(AudioDeviceInfo? output, IReadOnlyList<AudioDeviceInfo> inputs)
         {
-            string name = output.Name;
+            if (output == null) return null;
+            var container = PhysicalContainer(output);
+            if (container.HasValue)
+            {
+                var sameDevice = inputs.Where(input => PhysicalContainer(input) == container).ToList();
+                if (sameDevice.Count == 1) return sameDevice[0];
+                if (sameDevice.Count > 1) return UniqueNameMatch(output, sameDevice);
+            }
+
+            // Some drivers omit container metadata. A unique hardware name is the fallback.
+            return UniqueNameMatch(output, inputs.Where(input => !container.HasValue || !PhysicalContainer(input).HasValue));
+        }
+
+        internal static AudioDeviceInfo? SelectInput(IReadOnlyList<AudioDeviceInfo> inputs, string? selectedId,
+            AudioDeviceInfo? pairedInput, string? windowsDefaultId)
+        {
+            if (selectedId != null)
+                return inputs.FirstOrDefault(input => SameId(input.Id, selectedId));
+            return pairedInput ?? inputs.FirstOrDefault(input => SameId(input.Id, windowsDefaultId)) ?? inputs.FirstOrDefault();
+        }
+
+        internal static bool SameId(string? left, string? right) => string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+
+        private static Guid? PhysicalContainer(AudioDeviceInfo info) =>
+            info.ContainerId == Guid.Empty || info.ContainerId == SystemContainer ? null : info.ContainerId;
+
+        private static AudioDeviceInfo? UniqueNameMatch(AudioDeviceInfo output, IEnumerable<AudioDeviceInfo> inputs)
+        {
+            string hardware = HardwareName(output.Name);
+            if (string.IsNullOrWhiteSpace(hardware)) return null;
+            var matches = inputs.Where(input => string.Equals(HardwareName(input.Name), hardware, StringComparison.OrdinalIgnoreCase))
+                .Take(2).ToList();
+            return matches.Count == 1 ? matches[0] : null;
+        }
+
+        private static string HardwareName(string name)
+        {
             int open = name.IndexOf('('), close = name.LastIndexOf(')');
-            string hardware = open >= 0 && close > open ? name.Substring(open + 1, close - open - 1) : name;
-            return ListActiveInputs().FirstOrDefault(d => d.Name.Contains(hardware, StringComparison.OrdinalIgnoreCase));
+            return (open >= 0 && close > open ? name.Substring(open + 1, close - open - 1) : name).Trim();
         }
 
         private static List<AudioDeviceInfo> ListActive(int dataFlow, bool probeEq)
@@ -57,10 +96,12 @@ namespace GraphiteCompanion.Audio
                         try
                         {
                             if (device.GetId(out string id) != 0) continue;
+                            var properties = ReadEndpointProperties(device);
                             result.Add(new AudioDeviceInfo
                             {
                                 Id = id,
-                                Name = ReadFriendlyName(device) ?? id,
+                                Name = properties.Name ?? id,
+                                ContainerId = properties.ContainerId,
                                 HasCmEq = probeEq && CmEqController.Probe(device, id),
                             });
                         }
@@ -96,21 +137,30 @@ namespace GraphiteCompanion.Audio
             }
         }
 
-        private static string? ReadFriendlyName(IMMDevice device)
+        private static (string? Name, Guid? ContainerId) ReadEndpointProperties(IMMDevice device)
         {
-            if (device.OpenPropertyStore(Native.StgmRead, out var store) != 0 || store == null) return null;
+            if (device.OpenPropertyStore(Native.StgmRead, out var store) != 0 || store == null) return (null, null);
             try
             {
+                string? name = null;
+                Guid? containerId = null;
                 var key = FriendlyNameKey;
-                if (store.GetValue(ref key, out var pv) != 0) return null;
-                try
+                if (store.GetValue(ref key, out var pv) == 0)
                 {
-                    return pv.vt == Native.VtLpwstr ? Marshal.PtrToStringUni(pv.pointer) : null;
+                    try { if (pv.vt == Native.VtLpwstr) name = Marshal.PtrToStringUni(pv.pointer); }
+                    finally { Native.PropVariantClear(ref pv); }
                 }
-                finally
+                key = ContainerIdKey;
+                if (store.GetValue(ref key, out pv) == 0)
                 {
-                    Native.PropVariantClear(ref pv);
+                    try
+                    {
+                        if (pv.vt == Native.VtClsid && pv.pointer != IntPtr.Zero)
+                            containerId = Marshal.PtrToStructure<Guid>(pv.pointer);
+                    }
+                    finally { Native.PropVariantClear(ref pv); }
                 }
+                return (name, containerId);
             }
             finally
             {
@@ -134,13 +184,25 @@ namespace GraphiteCompanion.Audio
             Info = info;
             this.device = device;
 
-            var iid = typeof(IAudioEndpointVolume).GUID;
-            if (device.Activate(ref iid, Native.ClsCtxAll, IntPtr.Zero, out object obj) == 0)
-                volume = obj as IAudioEndpointVolume;
+            try
+            {
+                Native.Check(device.GetState(out int state));
+                if ((state & Native.DeviceStateActive) == 0)
+                    throw new InvalidOperationException("Аудиоустройство отключено.");
 
-            Eq = (IEqualizer?)CmEqController.TryOpen(device, info.Id)
-                 ?? (info.Id.StartsWith("{0.0.0", StringComparison.Ordinal) ? EqApoController.TryOpen(info.Id) : null);
-            Effects = ApoPropertyStore.Open(device, info.Id);
+                var iid = typeof(IAudioEndpointVolume).GUID;
+                if (device.Activate(ref iid, Native.ClsCtxAll, IntPtr.Zero, out object obj) == 0)
+                    volume = obj as IAudioEndpointVolume;
+
+                if (info.Id.StartsWith("{0.0.0", StringComparison.Ordinal))
+                    Eq = (IEqualizer?)CmEqController.TryOpen(device, info.Id) ?? EqApoController.TryOpen(info.Id);
+                Effects = ApoPropertyStore.Open(device, info.Id);
+            }
+            catch
+            {
+                Dispose();
+                throw;
+            }
         }
 
         public bool HasVolume => volume != null;

@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -42,6 +43,9 @@ namespace GraphiteCompanion
         private readonly DispatcherTimer effectTimer;
         private AudioDeviceSession? micSession;
         private bool suppressMicVolume;
+        private bool updatingMicChoices;
+        private List<AudioDeviceInfo> activeInputs = new();
+        private sealed record MicrophoneChoice(string? Id, string? Name, string Label);
 
         private AudioDeviceSession? session;
         private int[]? lastWrittenBands;
@@ -53,6 +57,7 @@ namespace GraphiteCompanion
         private bool suppressVolume;
         private bool suppressCombo;
         private bool reallyExit;
+        private bool shutdownStarted, shutdownComplete;
         private bool trayHintShown;
         private readonly Services.BatteryService battery = new();
         private Services.BatteryService.Level? batteryLevel;
@@ -102,6 +107,7 @@ namespace GraphiteCompanion
 
             LoadPresetToUi();
             InitFeatures();
+            HelpTips.Prepare(this);
             initialized = true;
 
             Closing += OnClosing;
@@ -150,6 +156,8 @@ namespace GraphiteCompanion
                 bandValues[i] = value;
 
                 var slider = new Slider { Style = sliderStyle, Tag = i, HorizontalAlignment = HorizontalAlignment.Center };
+                string region = i < 3 ? "Низкие частоты: бас и гул." : i < 6 ? "Средние частоты: тело инструментов и голоса." : "Высокие частоты: яркость, согласные и шипящие.";
+                HelpTips.Set(slider, region + " Вверх — усилить эту полосу, вниз — ослабить; 0 дБ — без изменения. Колесо мыши меняет значение на 1 дБ, двойной щелчок возвращает 0. Изменения слышны при включённом эквалайзере.");
                 slider.ValueChanged += Band_ValueChanged;
                 slider.PreviewMouseWheel += (s, e) =>
                 {
@@ -295,35 +303,123 @@ namespace GraphiteCompanion
             var micStore = micSession?.Effects;
             foreach (var c in micCards)
             {
-                c.SetAvailable(micStore != null);
-                if (micStore != null) c.Load(micStore.Read);
+                bool supported = micStore != null && IsSupported(micStore, c.Definition);
+                c.SetAvailable(supported);
+                c.Visibility = supported ? Visibility.Visible : Visibility.Collapsed;
+                if (supported) c.Load(micStore!.Read);
             }
             // other headsets may support only some of the C-Media effects - hide the rest
             foreach (var c in outputCards) c.Visibility = IsSupported(outStore, c.Definition) ? Visibility.Visible : Visibility.Collapsed;
-            foreach (var c in micCards) c.Visibility = IsSupported(micStore, c.Definition) ? Visibility.Visible : Visibility.Collapsed;
+            MicEffectsGrid.Visibility = micCards.Any(c => c.Visibility == Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
             UpdateCapabilityUi();
         }
 
         private static bool IsSupported(ApoPropertyStore? store, EffectDef def) =>
             store == null || store.Read(def.Format, def.EnablePid).HasValue;
 
-        private void OpenMicSession(AudioDeviceInfo? output)
+        private void RefreshMicrophones()
         {
-            micSession?.Dispose();
-            micSession = null;
-            AudioDeviceInfo? mic = null;
-            try
-            {
-                if (output != null) mic = AudioDevices.FindMatchingInput(output);
-                if (mic != null) micSession = AudioDevices.Open(mic);
-            }
+            try { activeInputs = AudioDevices.ListActiveInputs(); }
             catch (Exception ex)
             {
                 SettingsStore.LogError(ex);
+                if (micSession == null) MicName.Text = "Не удалось получить список входов Windows.";
+                return;
             }
-            MicName.Text = micSession != null ? micSession.Info.Name : "Микрофон гарнитуры не найден";
-            if (micSession == null) MicVolumeText.Text = "—";
-            MicVolumeSlider.IsEnabled = MicMuteButton.IsEnabled = micSession?.HasVolume == true;
+            ApplyMicrophoneSelection();
+        }
+
+        private void ApplyMicrophoneSelection()
+        {
+            string? selectedId = settings.MicrophoneId;
+            var paired = AudioDevices.FindMatchingInput(session?.Info, activeInputs);
+            string? windowsDefaultId = selectedId == null && paired == null && activeInputs.Count > 0
+                ? DefaultDevice.Get(Native.DataFlowCapture) : null;
+            var target = AudioDevices.SelectInput(activeInputs, selectedId, paired, windowsDefaultId);
+            if (selectedId != null && target != null && settings.MicrophoneName != target.Name)
+            {
+                settings.MicrophoneName = target.Name;
+                if (initialized) ScheduleSave();
+            }
+            UpdateMicrophoneChoices(activeInputs, paired);
+
+            bool changed = !AudioDevices.SameId(micSession?.Info.Id, target?.Id);
+            if (changed)
+            {
+                CloseMicrophone();
+                if (target != null)
+                {
+                    try { micSession = AudioDevices.Open(target); }
+                    catch (Exception ex) { SettingsStore.LogError(ex); }
+                }
+            }
+
+            UpdateMicrophoneControls(target);
+            if (!changed) return;
+            ReloadEffects();
+            PollMic();
+            UpdateMeters();
+            if (PageMic.Visibility == Visibility.Visible) UpdateNrCard();
+            flyout?.Refresh();
+        }
+
+        private void UpdateMicrophoneChoices(List<AudioDeviceInfo> inputs, AudioDeviceInfo? paired)
+        {
+            var choices = new List<MicrophoneChoice> { new(null, null, "Авто · гарнитура или вход Windows") };
+            foreach (var input in inputs)
+            {
+                string label = AudioDevices.SameId(input.Id, paired?.Id) ? input.Name + " · гарнитура" : input.Name;
+                choices.Add(new MicrophoneChoice(input.Id, input.Name, label));
+            }
+            string? selectedId = settings.MicrophoneId;
+            if (selectedId != null && !choices.Any(choice => AudioDevices.SameId(choice.Id, selectedId)))
+            {
+                string savedName = settings.MicrophoneName ?? "Выбранный микрофон";
+                choices.Add(new MicrophoneChoice(selectedId, savedName, savedName + " · отключён"));
+            }
+
+            updatingMicChoices = true;
+            try
+            {
+                if (MicDeviceCombo.ItemsSource is List<MicrophoneChoice> current && current.SequenceEqual(choices))
+                    choices = current;
+                else
+                    MicDeviceCombo.ItemsSource = choices;
+                MicDeviceCombo.SelectedItem = choices.First(choice => AudioDevices.SameId(choice.Id, selectedId));
+            }
+            finally { updatingMicChoices = false; }
+        }
+
+        private void UpdateMicrophoneControls(AudioDeviceInfo? target)
+        {
+            MicName.Visibility = micSession != null && settings.MicrophoneId != null ? Visibility.Collapsed : Visibility.Visible;
+            if (micSession != null)
+                MicName.Text = $"Сейчас: {target?.Name ?? micSession.Info.Name}";
+            else if (target != null)
+                MicName.Text = "Не удалось открыть этот микрофон.";
+            else
+                MicName.Text = settings.MicrophoneId == null ? "Подключите микрофон к компьютеру." : "Ожидаю подключения выбранного микрофона.";
+
+            bool hasVolume = micSession?.HasVolume == true;
+            MicVolumeSlider.IsEnabled = MicMuteButton.IsEnabled = hasVolume;
+            MonitorSwitch.IsEnabled = micSession != null && MonitorOutputId() != null;
+            if (hasVolume) return;
+            MicVolumeText.Text = "—";
+            UpdateMicMuteUi(false);
+            SyncTrayMic(false);
+        }
+
+        private void CloseMicrophone()
+        {
+            // Finish any queued driver writes while they still point to the old endpoint.
+            FlushMicVoiceSettings();
+            FlushEffects();
+            if (MicVolumeSlider.IsMouseCaptureWithin) Mouse.Capture(null);
+            tests.StopMonitor();
+            MonitorSwitch.IsChecked = false;
+            micMeter.Stop();
+            micSession?.Dispose();
+            micSession = null;
         }
 
         private void PollMic()
@@ -336,16 +432,22 @@ namespace GraphiteCompanion
                 if (!MicVolumeSlider.IsMouseCaptureWithin)
                 {
                     suppressMicVolume = true;
-                    MicVolumeSlider.Value = Math.Round(vol * 100);
-                    suppressMicVolume = false;
+                    try { MicVolumeSlider.Value = Math.Round(vol * 100); }
+                    finally { suppressMicVolume = false; }
+                    MicVolumeText.Text = $"{(int)Math.Round(vol * 100)}%";
                 }
                 UpdateMicMuteUi(mute);
                 SyncTrayMic(mute);
             }
-            catch
+            catch (Exception ex)
             {
-                micSession.Dispose();
-                micSession = null;
+                SettingsStore.LogError(ex);
+                CloseMicrophone();
+                UpdateMicrophoneControls(null);
+                ReloadEffects();
+                UpdateMeters();
+                if (PageMic.Visibility == Visibility.Visible) UpdateNrCard();
+                flyout?.Refresh();
             }
         }
 
@@ -353,7 +455,7 @@ namespace GraphiteCompanion
         {
             MicMuteButton.IsChecked = muted;
             MicMuteIcon.Text = muted ? "" : "";
-            MicMuteButton.ToolTip = muted ? "Включить микрофон" : "Выключить микрофон";
+            HelpTips.Set(MicMuteButton, (muted ? "Включить микрофон. " : "Выключить микрофон. ") + "Переключает вход выбранного микрофона в Windows, а не только его прослушивание здесь.");
         }
 
         private void MicVolume_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -382,13 +484,26 @@ namespace GraphiteCompanion
             PageEq.Visibility = tab == "Eq" ? Visibility.Visible : Visibility.Collapsed;
             PageEffects.Visibility = tab == "Effects" ? Visibility.Visible : Visibility.Collapsed;
             PageMic.Visibility = tab == "Mic" ? Visibility.Visible : Visibility.Collapsed;
-            PageAuto.Visibility = tab == "Auto" ? Visibility.Visible : Visibility.Collapsed;
-            PageMixer.Visibility = tab == "Mixer" ? Visibility.Visible : Visibility.Collapsed;
+            if (MixerPopup != null) MixerPopup.IsOpen = false;
             PageRecord.Visibility = tab == "Record" ? Visibility.Visible : Visibility.Collapsed;
-            if (tab == "Mic") UpdateNrCard();
-            if (tab == "Mixer") RefreshMixer();
+            PageSettings.Visibility = tab == "Settings" ? Visibility.Visible : Visibility.Collapsed;
+            OutputStrip.Visibility = tab is "Eq" or "Effects" ? Visibility.Visible : Visibility.Collapsed;
+            (PageTitle.Text, PageDescription.Text) = tab switch
+            {
+                "Mic" => ("Ваш голос", "Выберите микрофон, проверьте уровень и послушайте результат."),
+                "Record" => ("Сохраните момент", "Повтор — то, что уже произошло. Запись — то, что начнётся сейчас."),
+                "Effects" => ("Характер звучания", "Включайте нужные эффекты и сравнивайте результат на слух."),
+                "Settings" => ("Устройте всё по-своему", "Оформление, запуск приложения и уведомления."),
+                _ => ("Ваш звук", "Выберите настроение. Подстройте детали под себя."),
+            };
+            if (tab == "Mic")
+            {
+                if (initialized) RefreshMicrophones();
+                UpdateNrCard();
+            }
+            if (tab == "Record") UpdateRecStatus();
             if (initialized)
-                AnimatePage(tab switch { "Eq" => PageEq, "Effects" => PageEffects, "Mic" => PageMic, "Mixer" => PageMixer, "Record" => PageRecord, _ => PageAuto });
+                AnimatePage(tab switch { "Eq" => PageEq, "Effects" => PageEffects, "Mic" => PageMic, "Record" => PageRecord, "Settings" => PageSettings, _ => PageEq });
             if (tab == "Eq") Dispatcher.BeginInvoke(new Action(DrawCurve), DispatcherPriority.Loaded);
             UpdateMeters();
         }
@@ -445,7 +560,6 @@ namespace GraphiteCompanion
                 settings.Custom.Add(new CustomPreset
                 {
                     Name = name, Bands = (int[])bands.Clone(),
-                    Effects = custom.Effects == null ? null : new Dictionary<string, int>(custom.Effects),
                 });
                 settings.ActiveCustom = name;
                 draftCopy = name;
@@ -485,7 +599,7 @@ namespace GraphiteCompanion
             ModeMovies.IsChecked = builtIn && settings.Mode == ListeningMode.Movies;
             CustomList.SelectedItem = settings.ActiveCustom;
             DeleteCustomButton.IsEnabled = CustomList.SelectedItem != null;
-            PadHint.Text = IsSpeakers ? SpeakerPresets.Hint : FactoryPresets.Hint(settings.Earpad);
+            HelpTips.Set(PadCardTitle, IsSpeakers ? SpeakerPresets.Hint : FactoryPresets.Hint(settings.Earpad));
             KindHeadphones.IsChecked = !IsSpeakers;
             KindSpeakers.IsChecked = IsSpeakers;
             PadSelector.Visibility = IsSpeakers ? Visibility.Collapsed : Visibility.Visible;
@@ -496,7 +610,6 @@ namespace GraphiteCompanion
             DrawCurve();
             UpdateClipInfo();
             ScheduleApply();
-            ApplyLinkedEffects();
             if (initialized) StoreDeviceProfile();
             flyout?.Refresh();
         }
@@ -511,14 +624,12 @@ namespace GraphiteCompanion
             bool edited = settings.ActiveCustom == null && settings.Edited.ContainsKey(CurrentKey);
             PresetTitle.Text = PresetTitleText() + (edited ? " · изменён" : "");
             ResetButton.IsEnabled = edited;
-            if (initialized) UpdateDiscord();
             tray.UpdateState(settings.Earpad, settings.ActiveCustom == null ? settings.Mode : null,
                              settings.EqEnabled, PresetTitleText());
         }
 
         private void SelectMode(ListeningMode mode, bool notify)
         {
-            ForgetAutoState();
             settings.Mode = mode;
             settings.ActiveCustom = null;
             LoadPresetToUi();
@@ -563,8 +674,6 @@ namespace GraphiteCompanion
             foreach (var c in settings.Custom) customNames.Add(c.Name);
             CustomEmpty.Visibility = customNames.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             CustomList.Visibility = customNames.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-            RefreshRuleTargets();
-            RebuildRules();
         }
 
         private void ImportCurrentDeviceEq()
@@ -638,7 +747,9 @@ namespace GraphiteCompanion
 
         private void Poll()
         {
+            if (overlay is { IsDragging: true }) return;
             if (++pollTick % 3 == 0 || session == null) RefreshDevices(force: false);
+            if (pollTick % 3 == 0) RefreshMicrophones();
             if (pollTick % 60 == 0 || batteryLevel == null && pollTick % 15 == 0) UpdateBattery();
             PollMic();
             if (initialized) FunTick();
@@ -721,6 +832,7 @@ namespace GraphiteCompanion
             suppressCombo = false;
 
             OpenSession(target);
+            RefreshMicrophones();
         }
 
         private void OpenSession(AudioDeviceInfo? info)
@@ -763,10 +875,7 @@ namespace GraphiteCompanion
             }
             EqSwitch.IsEnabled = session.Eq != null;
             BandsGrid.Opacity = session.Eq != null ? 1 : 0.45;
-            OpenMicSession(info);
             ReloadEffects();
-            if (initialized) ApplyLinkedEffects();
-            PollMic();
             if (initialized) { CompareOff(); RestoreDeviceProfile(); UpdateBrand(); UpdateMeters(); LoadPresetToUi(); }
             Dispatcher.BeginInvoke(new Action(UpdateBattery), System.Windows.Threading.DispatcherPriority.Background);
         }
@@ -777,22 +886,13 @@ namespace GraphiteCompanion
             tests.StopMonitor();
             tests.StopChannelTest();
             analyzer.Stop();
-            micMeter.Stop();
             if (MonitorSwitch != null) MonitorSwitch.IsChecked = false;
             session?.Dispose();
             session = null;
-            micSession?.Dispose();
-            micSession = null;
             VolumeText.Text = "—";
             batteryLevel = null;
             if (BatteryText != null) BatteryText.Visibility = Visibility.Collapsed;
-            if (MicName != null)
-            {
-                MicName.Text = "Микрофон гарнитуры не найден";
-                MicVolumeText.Text = "—";
-                pendingEffects.Clear();
-                ReloadEffects();
-            }
+            ReloadEffects();
             if (initialized) { UpdateBrand(); UpdateMeters(); }
         }
 
@@ -812,7 +912,7 @@ namespace GraphiteCompanion
         {
             MuteButton.IsChecked = muted;
             MuteIcon.Text = muted ? "" : "";
-            MuteButton.ToolTip = muted ? "Включить звук" : "Выключить звук";
+            HelpTips.Set(MuteButton, (muted ? "Включить звук. " : "Выключить звук. ") + "Временно отключает звук выбранного устройства. Положение регулятора громкости сохраняется.");
         }
 
         // ===================== Hotkeys / tray / window =====================
@@ -822,6 +922,13 @@ namespace GraphiteCompanion
             // Win+G: taken from the Xbox Game Bar with a keyboard hook; the configurable combination always works as well
             winG = new WinGHook();
             winG.Pressed += () => Dispatcher.BeginInvoke(new Action(ToggleOverlay));
+            winG.EscapePressed = () =>
+            {
+                var current = overlay;
+                if (current is not { IsVisible: true }) return false;
+                Dispatcher.BeginInvoke(new Action(() => { if (current.IsVisible) current.Close(); }));
+                return true;
+            };
             ApplyHotkeys();
         }
 
@@ -833,6 +940,7 @@ namespace GraphiteCompanion
 
         public void ShowFromTray()
         {
+            if (shutdownStarted) return;
             Show();
             if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
             Activate();
@@ -847,8 +955,9 @@ namespace GraphiteCompanion
             Close();
         }
 
-        private void OnClosing(object? sender, CancelEventArgs e)
+        private async void OnClosing(object? sender, CancelEventArgs e)
         {
+            if (shutdownComplete) return;
             if (!reallyExit && settings.MinimizeToTray)
             {
                 e.Cancel = true;
@@ -862,16 +971,41 @@ namespace GraphiteCompanion
                 return;
             }
 
-            pollTimer.Stop();
-            applyTimer.Stop();
-            ApplyToDevice();
-            DisposeExtras();
-            DisposeFeatures();
-            SettingsStore.Save(settings);
+            e.Cancel = true;
+            if (shutdownStarted) return;
+            shutdownStarted = true;
+            reallyExit = true;
+            Hide();
+            tray.Dispose();
             hotkeys.Dispose();
             winG?.Dispose();
-            tray.Dispose();
-            CloseSession();
+            pollTimer.Stop();
+            applyTimer.Stop();
+            saveTimer.Stop();
+            effectTimer.Stop();
+            updateTimer?.Stop();
+            trimTimer?.Stop();
+            await Task.Yield();
+            foreach (var child in Application.Current.Windows.Cast<Window>().Where(window => window != this).ToArray())
+            {
+                try { child.Close(); }
+                catch (Exception ex) { SettingsStore.LogError(ex); }
+            }
+            var recorderShutdown = DisposeRecordAsync();
+            try
+            {
+                ApplyToDevice();
+                CloseMicrophone();
+                DisposeExtras();
+                DisposeFeatures();
+            }
+            catch (Exception ex) { SettingsStore.LogError(ex); }
+            try { await recorderShutdown; }
+            catch (Exception ex) { SettingsStore.LogError(ex); }
+            SettingsStore.Save(settings);
+            try { CloseSession(); }
+            catch (Exception ex) { SettingsStore.LogError(ex); }
+            shutdownComplete = true;
             Application.Current.Shutdown();
         }
 
@@ -895,7 +1029,6 @@ namespace GraphiteCompanion
             if (suppress || !initialized) return;
             if (CustomList.SelectedItem is string name)
             {
-                ForgetAutoState();
                 settings.ActiveCustom = name;
                 LoadPresetToUi();
                 ScheduleSave();
@@ -922,9 +1055,6 @@ namespace GraphiteCompanion
             var existing = settings.Custom.FirstOrDefault(c => c.Name == name);
             if (existing != null) existing.Bands = (int[])bands.Clone();
             else settings.Custom.Add(new CustomPreset { Name = name, Bands = (int[])bands.Clone() });
-            if (settings.LinkEffects && currentEffects.Count > 0)
-                settings.Custom.First(c => c.Name == name).Effects = new Dictionary<string, int>(currentEffects);
-            ForgetAutoState();
 
             settings.ActiveCustom = name;
             CustomName.Text = "";
@@ -974,8 +1104,18 @@ namespace GraphiteCompanion
             {
                 settings.DeviceId = info.Id;
                 OpenSession(info);
+                RefreshMicrophones();
                 ScheduleSave();
             }
+        }
+
+        private void MicDeviceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (updatingMicChoices || !initialized || MicDeviceCombo.SelectedItem is not MicrophoneChoice choice) return;
+            settings.MicrophoneId = choice.Id;
+            settings.MicrophoneName = choice.Name;
+            ApplyMicrophoneSelection();
+            ScheduleSave();
         }
 
         private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
