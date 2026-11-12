@@ -1,4 +1,4 @@
-<Window x:Class="GraphiteCompanion.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="SoundShot" Width="1180" Height="820" MinWidth="1060" MinHeight="720" WindowStartupLocation="CenterScreen" Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}" FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13">
+<Window x:Class="GraphiteCompanion.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:controls="clr-namespace:GraphiteCompanion.Controls" Title="SoundShot" Width="1180" Height="820" MinWidth="1060" MinHeight="720" WindowStartupLocation="CenterScreen" Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}" FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13">
   <Window.Resources>
     <Style TargetType="Expander">
       <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
@@ -811,7 +811,14 @@
               <StackPanel>
                 <StackPanel x:Name="SoundTitle" Orientation="Horizontal" Margin="0,0,0,6"><TextBlock Text="Звук во всех записях" FontSize="13" FontWeight="SemiBold"/></StackPanel>
                 <CheckBox x:Name="RecSystemSwitch" Style="{StaticResource Switch}" Content="Записывать звук компьютера" Click="RecSetting_Changed" ToolTip="Добавляет в ролик звук устройства вывода Windows по умолчанию: игру, музыку и другие программы. Если звук идёт через другое устройство, проверьте выбор вывода в Windows." FontSize="12" Margin="0,0,0,6" />
-                <CheckBox x:Name="RecMicSwitch" FontSize="12" Style="{StaticResource Switch}" Content="Записывать микрофон" Click="RecSetting_Changed" ToolTip="Добавляет голос с микрофона Windows по умолчанию для связи. Он может отличаться от микрофона, выбранного для настройки на вкладке «Микрофон». Проверьте устройство в Windows перед записью." Margin="0" />
+                <CheckBox x:Name="RecMicSwitch" FontSize="12" Style="{StaticResource Switch}" Content="Записывать микрофон" Click="RecSetting_Changed" ToolTip="Добавляет в откаты и новые записи голос с микрофона, выбранного ниже. Выбор на вкладке «Микрофон» не меняет источник записи." Margin="0" />
+                <controls:RecordingSourcePanel Margin="0,10,0,0">
+                  <TextBlock Text="Микрофон для откатов и записи" FontSize="12" Margin="0,0,0,6"/>
+                  <ComboBox x:Name="RecMicrophoneCombo" AutomationProperties.Name="Микрофон для откатов и записи" HorizontalAlignment="Stretch" SelectionChanged="RecMicrophone_SelectionChanged" ToolTip="Выберите конкретный микрофон или устройство Windows по умолчанию для связи. Изменение применяется к новому буферу откатов и следующим записям; уже идущая запись сохраняет прежний источник.">
+                    <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Label}"/></DataTemplate></ComboBox.ItemTemplate>
+                  </ComboBox>
+                  <TextBlock x:Name="RecMicrophoneHint" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource SubTextBrush}" Margin="0,6,0,0"/>
+                </controls:RecordingSourcePanel>
               </StackPanel>
             </Border>
           </Grid>

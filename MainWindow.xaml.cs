@@ -337,6 +337,7 @@ namespace GraphiteCompanion
                 return;
             }
             ApplyMicrophoneSelection();
+            RefreshRecordingMicrophoneChoices();
         }
 
         private void ApplyMicrophoneSelection()

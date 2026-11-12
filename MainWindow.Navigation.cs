@@ -46,12 +46,14 @@ public partial class MainWindow
         }
         var board=new SnapBoard(cards){SingleColumn=true};
         var root=new DockPanel{Margin=new Thickness(18)};
-        var hint=SnapBoard.Text("Перетаскивайте пункты. Нажмите пункт: «Название» — переименовать, × — скрыть. «Скрытые» — вернуть. «Готово» — сохранить.");hint.Margin=new Thickness(0,0,0,16);DockPanel.SetDock(hint,Dock.Top);root.Children.Add(hint);root.Children.Add(board);
-        var window=new Window{Title="Настроить меню",Width=610,Height=690,MinWidth=500,MinHeight=460,Owner=Window.GetWindow(SidebarHost),WindowStartupLocation=WindowStartupLocation.CenterOwner,Content=root};
+        var hint=SnapBoard.Text("Перетащите пункт, чтобы изменить порядок. Нажмите пункт: «Название» — переименовать, × — скрыть.");hint.Margin=new Thickness(0,0,0,16);DockPanel.SetDock(hint,Dock.Top);root.Children.Add(hint);
+        var actions=board.EmbedEditorTools();actions.Margin=new Thickness(0,12,0,0);DockPanel.SetDock(actions,Dock.Bottom);root.Children.Add(actions);root.Children.Add(board);
+        var host=Window.GetWindow(SidebarHost);
+        var window=new Window{Title="Настроить меню SoundShot",Width=610,Height=690,MinWidth=500,MinHeight=460,Owner=host,ShowInTaskbar=false,WindowStartupLocation=WindowStartupLocation.CenterOwner,Content=root};
         window.SetResourceReference(BackgroundProperty,"BgBrush");window.SetResourceReference(ForegroundProperty,"TextBrush");
         bool closing=false;
         board.Finished+=save=>{if(save){settings.Navigation=NavigationLayout.Normalize(board.Value.Blocks.Select(b=>new NavigationItem{Id=b.Id,Visible=b.Visible,Name=draft.First(x=>x.Id==b.Id).Name}));ApplyNavigationLayout();ScheduleSave();}if(!closing)window.Close();};
         window.Closing+=(_,_)=>{closing=true;if(board.Editing)board.Finish(false);};
-        navigationEditor=window;window.Closed+=(_,_)=>navigationEditor=null;window.Show();board.Begin();
+        navigationEditor=window;window.Closed+=(_,_)=>{navigationEditor=null;if(host is {IsVisible:true}&&host.WindowState!=WindowState.Minimized)host.Activate();};window.Show();board.Begin();
     }
 }

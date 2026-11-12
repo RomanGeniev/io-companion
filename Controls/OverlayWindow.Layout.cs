@@ -142,14 +142,14 @@ public sealed partial class OverlayWindow
     }
     private void ApplyNativeOpacityNow()
     {
-        if (applyingOpacity || hwnd == IntPtr.Zero || !IsVisible) return;
+        if (applyingOpacity || hwnd == IntPtr.Zero || (!IsVisible && !firstPresentationPending)) return;
         applyingOpacity = true;
         try {
             int style = GetWindowLong(hwnd, -20);
-            if (layout.Opacity < .999)
+            if (firstPresentationPending || layout.Opacity < .999)
             {
                 if((style & 0x00080000) == 0) SetWindowLong(hwnd, -20, style | 0x00080000);
-                byte wanted=(byte)Math.Round(layout.Opacity * 255);
+                byte wanted=firstPresentationPending?(byte)0:(byte)Math.Round(layout.Opacity * 255);
                 if(!GetLayeredWindowAttributes(hwnd,out _,out byte actual,out uint flags) || actual!=wanted || flags!=2)
                     SetLayeredWindowAttributes(hwnd, 0, wanted, 2);
             }

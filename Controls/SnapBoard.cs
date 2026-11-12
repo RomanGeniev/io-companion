@@ -26,6 +26,17 @@ public sealed class CanvasCard
 }
 public sealed partial class SnapBoard : UserControl
 {
+    // Fluent's default scrollbar floats above content, including resize handles.
+    // Give it a separate permanent column in every theme, with native scroll parts.
+    private static readonly ControlTemplate BoardScrollTemplate = (ControlTemplate)System.Windows.Markup.XamlReader.Parse("""
+        <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" TargetType="ScrollViewer">
+          <Grid Background="{TemplateBinding Background}">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="17"/></Grid.ColumnDefinitions>
+            <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" Grid.Column="0" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" CanContentScroll="{TemplateBinding CanContentScroll}" ClipToBounds="True"/>
+            <ScrollBar x:Name="PART_VerticalScrollBar" Grid.Column="1" Orientation="Vertical" Minimum="0" Maximum="{TemplateBinding ScrollableHeight}" ViewportSize="{TemplateBinding ViewportHeight}" Value="{TemplateBinding VerticalOffset}" Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
+          </Grid>
+        </ControlTemplate>
+        """);
     private static readonly ControlTemplate MenuTemplate = (ControlTemplate)System.Windows.Markup.XamlReader.Parse("""
         <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" TargetType="ContextMenu">
           <Border Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" CornerRadius="9" Padding="4"><ItemsPresenter/></Border>
@@ -82,8 +93,10 @@ public sealed partial class SnapBoard : UserControl
         canvas.LeftWeight=leftWeight;canvas.RightWeight=rightWeight;body.Children.Add(canvas);
         columns.ColumnDefinitions.Add(new() { Width = new GridLength(leftWeight, GridUnitType.Star) }); columns.ColumnDefinitions.Add(new() { Width = new GridLength(14) }); columns.ColumnDefinitions.Add(new() { Width = new GridLength(rightWeight, GridUnitType.Star) });
         columns.Children.Add(left); Grid.SetColumn(right, 2); columns.Children.Add(right);
-        scroll = new ScrollViewer { Content = body, Background = Brushes.Transparent, AllowDrop = true, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
-        root.Children.Add(scroll); toolsLayer.Children.Add(toolbarSurface); root.Children.Add(toolsLayer);
+        // Reserve the scrollbar gutter in normal and edit mode alike. Otherwise the
+        // first growing card can create a scrollbar and unexpectedly shrink itself.
+        scroll = new ScrollViewer { Template = BoardScrollTemplate, Content = body, Background = Brushes.Transparent, AllowDrop = true, VerticalScrollBarVisibility = ScrollBarVisibility.Visible, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        root.Children.Add(scroll);root.Children.Add(placementGuides); toolsLayer.Children.Add(toolbarSurface); root.Children.Add(toolsLayer);
         foreach (var pair in new[] { (libraryPopup, library), (optionsPopup, options) }) {
             var frame = new Border { Child = new ScrollViewer { Content = pair.Item2, MaxHeight = 240, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }, Padding = new Thickness(10), CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1), MaxWidth = 480 };
             frame.SetResourceReference(Border.BackgroundProperty, "CardBrush"); frame.SetResourceReference(Border.BorderBrushProperty, "CardBorderBrush"); pair.Item1.Child = frame; root.Children.Add(pair.Item1);
@@ -96,11 +109,13 @@ public sealed partial class SnapBoard : UserControl
         }
         Content = new AdornerDecorator { Child = root };
         foreach (var card in cards) AddTile(card);
-        scroll.PreviewDragOver += (_, e) => {
+        void PreviewBlockDrag(object sender,DragEventArgs e) {
             var payload = EditTile.Read(e, this); if (payload == null || !Editing || active != null) return;
             e.Effects = DragDropEffects.Move; e.Handled = true;
-            AutoScroll(e); PreviewAt(payload.Id, e.GetPosition(body));
-        };
+            AutoScroll(e); PreviewAt(payload.Id, DragPreview.PointerOn(body,e.GetPosition(body)));
+        }
+        scroll.PreviewDragEnter += PreviewBlockDrag;
+        scroll.PreviewDragOver += PreviewBlockDrag;
         scroll.PreviewDrop += AcceptDrop;
         Loaded += (_, _) => { if(owner!=null)owner.PreviewKeyDown-=OwnerKeyDown;owner = Window.GetWindow(this); if (owner != null) owner.PreviewKeyDown += OwnerKeyDown; };
         Apply(saved); Unloaded += (_, _) => Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() => {
@@ -117,14 +132,15 @@ public sealed partial class SnapBoard : UserControl
     }
     private void AddTile(CanvasCard card)
     {
-        var tile = new EditTile(card.Element,this,card.Id,card.Name,()=>Hide(card.Id),card.Inside.Count>0||card.Options!=null?()=>Enter(card.Id):null,card.Resizable?()=>ShowSize(card.Id):null){Margin=new Thickness(0,0,0,10),AllowDrop=true,InlineActions=true,InsideLabel=card.InsideLabel,IsContainer=card.Inside.Count>0,HasOptions=card.Options!=null};
+        var tile = new EditTile(card.Element,this,card.Id,card.Name,()=>Hide(card.Id),card.Inside.Count>0||card.Options!=null?()=>Enter(card.Id):null,card.Resizable?()=>{}:null){Margin=new Thickness(0,0,0,10),AllowDrop=true,InlineActions=true,InsideLabel=card.InsideLabel,IsContainer=card.Inside.Count>0,HasOptions=card.Options!=null};
         tile.Selected+=SelectElement;
-        tile.ToolTip = card.Name + " · тяните заголовок или маркер размера";
+        tile.ToolTip = card.Name + " · за ⠿ — переместить, за угол — масштабировать";
         tile.DragStarted+=()=>{BeginOperation();BeginDrag();};
-        tile.ResizeStarted+=BeginOperation;tile.ResizeFinished+=accepted=>{if(accepted)EndOperation();else CancelOperation();};
+        tile.ResizeStarted+=BeginBlockResize;tile.ResizeFinished+=accepted=>{CompletePlacement(accepted);if(accepted)EndOperation();else CancelOperation();};
         tile.MoveByKeyboard+=delta=>MoveBlockByKeyboard(card.Id,delta);
-        tile.SizeChangedByUser+=size=>{EnableFlow();state.Blocks.First(b=>b.Id==card.Id).Size=size;tile.SetSize(size);canvas.InvalidateMeasure();};
-        tile.DragFinished+=accepted=>{if(!accepted&&dragOriginal!=null)SetPreview(dragOriginal);dragOriginal=null;dragSlots.Clear();EndOperation();};
+        tile.Nudge+=delta=>NudgeBlock(card.Id,delta);
+        tile.SizeChangedByUser+=size=>ResizeBlock(card.Id,size);
+        tile.DragFinished+=accepted=>{if(!accepted&&dragOriginal!=null)SetPreview(dragOriginal);CompletePlacement(accepted);dragOriginal=null;dragSlots.Clear();EndOperation();};
         tiles[card.Id]=tile;
         foreach(var group in card.AllGroups) { group.EnterRequested=(name,groups)=>{path.Push((name,groups));Render();ModeChanged?.Invoke();}; group.OptionsRequested=ShowOptions; group.SelectionRequested=SelectElement;group.OperationStarting=BeginOperation;group.OperationFinished=EndOperation;group.OperationCanceled=CancelOperation;group.DragSessionStarted=BeginElementDrag;group.DragSessionFinished=FinishElementDrag;group.DragPreviewRequested=PreviewElement; }
     }
@@ -142,7 +158,6 @@ public sealed partial class SnapBoard : UserControl
         if (UsesInspector) { inspectorDetail = "options"; RenderInspector(); return; }
         libraryPopup.IsOpen=false;optionsPopup.IsOpen=true;
     }
-    private void ShowSize(string id)=>ShowOptions(LayoutSizing.Editor(()=>state.Blocks.First(b=>b.Id==id).Size,value=>{state.Blocks.First(b=>b.Id==id).Size=value;tiles[id].SetSize(value);},()=>tiles[id].ReadableMinimumWidth));
     private void OwnerKeyDown(object sender, KeyEventArgs e) { if(Editing && e.Key==Key.Escape && EditTile.CancelActiveResize()){e.Handled=true;return;} if(Editing && e.Key==Key.Z && Keyboard.Modifiers==ModifierKeys.Control && e.OriginalSource is not TextBoxBase){Undo();e.Handled=true;return;} if (e.Key != Key.Escape || !Editing || e.Handled || DragPreview.Active) return; e.Handled = true; if (CloseSelectionList() || CloseFlyouts()) return; if (active != null) Back(); else Finish(false); }
     public void Apply(CanvasLayout? value)
     {
@@ -164,6 +179,7 @@ public sealed partial class SnapBoard : UserControl
     public void Finish(bool save)
     {
         if (!Editing) return; Editing = false; CloseInspector(); active = null; path.Clear(); dragOriginal = null; dragSlots.Clear();
+        CompletePlacement(save);
         foreach (var group in AllGroups) group.SetEditing(null);
         if (!save) Apply(original); else Render(); Finished?.Invoke(save); ModeChanged?.Invoke();
     }
@@ -183,6 +199,7 @@ public sealed partial class SnapBoard : UserControl
             if(!tiles.TryGetValue(block.Id,out var tile))continue;
             tile.SetSize(block.Size);tile.Visibility=block.Visible?Visibility.Visible:Visibility.Collapsed;tile.SetEditing(Editing);tile.Dim(false);canvas.Children.Add(tile);
         }
+        PrepareRestoredCards();
     }
 
     internal void ShowDragTools(bool dragging) { if (dragging) CloseFlyouts(); toolbarSurface.Visibility = Editing && (UsesInspector || !dragging) ? Visibility.Visible : Visibility.Collapsed; }
@@ -257,12 +274,14 @@ public sealed partial class SnapBoard : UserControl
         dragOriginal = state.Copy(); dragWidth = scroll.ActualWidth;
         dragSlots = state.Blocks.Where(b => b.Visible && tiles.ContainsKey(b.Id) && tiles[b.Id].ActualHeight > 1)
             .ToDictionary(b => b.Id, b => new Rect(tiles[b.Id].TranslatePoint(new Point(), body), tiles[b.Id].RenderSize));
+        if(!SingleColumn)placementBaseline=PositionedSnapshot();
     }
     // Resolve against the positions at grab time, never the positions created by a
     // previous preview. A stationary pointer therefore cannot undo its own move.
     private void PreviewAt(string id, Point at)
     {
         if (dragOriginal == null) return;
+        if(!SingleColumn){PreviewPosition(id,at);return;}
         var hit=dragSlots.OrderBy(x=>{var r=x.Value;return(new Point(Math.Clamp(at.X,r.Left,r.Right),Math.Clamp(at.Y,r.Top,r.Bottom))-at).LengthSquared;}).FirstOrDefault();
         if(hit.Key==null)return;
         if(hit.Key==id){SetPreview(dragOriginal.Copy());return;}
@@ -293,11 +312,11 @@ public sealed partial class SnapBoard : UserControl
     }
     private void SetPreview(CanvasLayout next)
     {
-        if (state.Flow==next.Flow && state.Blocks.Select(b => (b.Id, b.Zone)).SequenceEqual(next.Blocks.Select(b => (b.Id, b.Zone)))) return;
-        state = next; ArrangeBlocks(); DragPreview.Refresh();
+        if (System.Text.Json.JsonSerializer.Serialize(state)==System.Text.Json.JsonSerializer.Serialize(next)) return;
+        state = next;canvas.MovingId=null; ArrangeBlocks(); DragPreview.Refresh();
     }
-    private void AcceptDrop(object sender, DragEventArgs e) { if (!Editing || active != null || EditTile.Read(e, this) == null) return; e.Effects = DragDropEffects.Move; e.Handled = true; }
-    private void AutoScroll(DragEventArgs e) { var point = e.GetPosition(scroll); if (point.Y < 40) scroll.ScrollToVerticalOffset(scroll.VerticalOffset - 12); else if (point.Y > scroll.ActualHeight - 40) scroll.ScrollToVerticalOffset(scroll.VerticalOffset + 12); }
+    private void AcceptDrop(object sender, DragEventArgs e) { var payload=EditTile.Read(e,this);if (!Editing || active != null || payload == null) return; PreviewAt(payload.Id,DragPreview.PointerOn(body,e.GetPosition(body)));e.Effects = DragDropEffects.Move; e.Handled = true; }
+    private void AutoScroll(DragEventArgs e) { var point = DragPreview.PointerOn(scroll,e.GetPosition(scroll)); if (point.Y < 40) scroll.ScrollToVerticalOffset(scroll.VerticalOffset - 12); else if (point.Y > scroll.ActualHeight - 40) scroll.ScrollToVerticalOffset(scroll.VerticalOffset + 12); }
     public static TextBlock Text(string value) { var text = new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; text.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush"); return text; }
     public static Button Button(string text, Action action, string? tip = null) { var b = new Button { Content = text, ToolTip = tip, Padding = new Thickness(9, 6, 9, 6), Margin = new Thickness(2), MinHeight = 28 }; b.SetResourceReference(StyleProperty, "GhostButton"); b.Click += (_, e) => { e.Handled = true; action(); }; return b; }
 }

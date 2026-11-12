@@ -119,7 +119,7 @@ public sealed class ViewLayoutGroup
         for (int i = 0; i < children.Length; i++)
         {
             string blockId = i.ToString();
-            wrappers[i]=new EditTile(children[i],this,blockId,names[i],()=>{var owner=OwnerOf(blockId);owner.Group.HideItem(owner.Id);},()=>{},()=>{}){InlineActions=true,ShowResizeGrip=true};
+            wrappers[i]=new EditTile(children[i],this,blockId,names[i],()=>{var owner=OwnerOf(blockId);owner.Group.HideItem(owner.Id);}){InlineActions=true,ShowResizeGrip=false};
             available[blockId]=wrappers[i];
             wrappers[i].Selected += tile => SelectionRequested?.Invoke(tile);
             if(flow!=null&&slots[i]<lengths.Length)flow.Lengths[wrappers[i]]=lengths[slots[i]];
@@ -176,7 +176,6 @@ public sealed class ViewLayoutGroup
         if (current.Select(b => (b.Id, b.Visible)).SequenceEqual(next.Select(b => (b.Id, b.Visible)))) return;
         Apply(next); edited?.Invoke(Snapshot()); DragPreview.Refresh();
     }
-    private void ShowSize(string id) => OptionsRequested?.Invoke(LayoutSizing.Editor(()=>current.First(x=>x.Id==id).Size, value=>{current.First(x=>x.Id==id).Size=value; Apply(current); edited?.Invoke(Snapshot());},()=>available[id].ReadableMinimumWidth));
     public List<ViewBlockSetting> Snapshot() => Normalize(current);
     // Used only once while migrating the old nested page containers to semantic cards.
     public FrameworkElement Take(int index) => wrappers[index].Detach();

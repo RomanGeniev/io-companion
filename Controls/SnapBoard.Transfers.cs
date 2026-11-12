@@ -15,8 +15,8 @@ public sealed partial class SnapBoard
     private void BeginElementDrag()
     {
         BeginOperation();elementBaseline=state.Copy();elementSlots.Clear();elementHostSlots.Clear();
-        foreach(var group in AllGroups)elementSlots[group.Id]=group.Entries.Where(e=>e.Tile.IsVisible).ToDictionary(e=>e.Id,e=>new Rect(e.Tile.TranslatePoint(new Point(),body),e.Tile.RenderSize));
-        foreach(var group in AllGroups.Where(g=>g.HostElement.IsVisible&&g.HostElement.ActualHeight>0))elementHostSlots[group]=new Rect(group.HostElement.TranslatePoint(new Point(),body),group.HostElement.RenderSize);
+        foreach(var group in AllGroups)elementSlots[group.Id]=group.Entries.Where(e=>e.Tile.IsVisible).ToDictionary(e=>e.Id,e=>e.Tile.TransformToAncestor(body).TransformBounds(new Rect(e.Tile.RenderSize)));
+        foreach(var group in AllGroups.Where(g=>g.HostElement.IsVisible&&g.HostElement.ActualHeight>0))elementHostSlots[group]=group.HostElement.TransformToAncestor(body).TransformBounds(new Rect(group.HostElement.RenderSize));
     }
     private void FinishElementDrag(bool accepted)
     {

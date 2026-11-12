@@ -22,13 +22,18 @@ internal sealed class DragPreview : Adorner, IDisposable
     public event Action? Ended;
     [StructLayout(LayoutKind.Sequential)] private struct CursorPoint { public int X, Y; }
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out CursorPoint point);
+    internal static Point PointerOn(Visual target,Point fallback)
+        => GetCursorPos(out var point)?target.PointFromScreen(new Point(point.X,point.Y)):fallback;
 
     private DragPreview(EditTile tile, FrameworkElement root, AdornerLayer layer, Point grab) : base(root)
     {
-        this.layer = layer; this.grab = grab;
+        this.layer = layer;
+        var transform=tile.TransformToAncestor(root);
+        var bounds=transform.TransformBounds(new Rect(tile.RenderSize));
+        var grabbedPoint=transform.Transform(grab);this.grab=new Point(grabbedPoint.X-bounds.X,grabbedPoint.Y-bounds.Y);
         for (DependencyObject? at = tile; at != null; at = VisualTreeHelper.GetParent(at)) if (at is SnapBoard found) { board = found; break; }
         board?.ShowDragTools(true);
-        IsHitTestVisible = false; image = tile.Snapshot(); size = tile.RenderSize;
+        IsHitTestVisible = false; image = tile.Snapshot(); size = bounds.Size;
         owner = Window.GetWindow(tile);
         if (owner != null) owner.AddHandler(DragDrop.GiveFeedbackEvent, new GiveFeedbackEventHandler(Feedback), true);
         layer.Add(this); Update();

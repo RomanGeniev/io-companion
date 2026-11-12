@@ -25,6 +25,7 @@ namespace GraphiteCompanion.Services
         public int Quality = 1;           // 0 low, 1 medium, 2 high
         public bool SystemSound = true;
         public bool Microphone;
+        public string? MicrophoneDeviceId;
         public bool HasAudio => SystemSound || Microphone;
         public int ReplaySeconds = 60;
         public string Folder = "";
@@ -59,7 +60,7 @@ namespace GraphiteCompanion.Services
         public string MonitorName { get; set; } = "Монитор 1";
 
         private readonly JobObject job = new();
-        private RecordingAudio? audio;
+        private RecordingAudio? bufferAudio, recordAudio;
         private Process? bufferProc, recordProc;
         private CaptureProgress? bufferProgress, recordProgress;
         private ReplayRing? activeRing, previousRing;
@@ -134,8 +135,8 @@ namespace GraphiteCompanion.Services
             public int Readers;
         }
 
-        internal bool BufferStalled(long now, bool interacting) => audio?.Failed == true || bufferProgress?.Stalled(now, interacting) == true;
-        internal bool RecordingStalled(long now, bool interacting) => audio?.Failed == true || recordProgress?.Stalled(now, interacting) == true;
+        internal bool BufferStalled(long now, bool interacting) => bufferAudio?.Failed == true || bufferProgress?.Stalled(now, interacting) == true;
+        internal bool RecordingStalled(long now, bool interacting) => recordAudio?.Failed == true || recordProgress?.Stalled(now, interacting) == true;
 
         public static string EncoderName(Encoder e) => e switch
         {
@@ -242,12 +243,12 @@ namespace GraphiteCompanion.Services
             return $"-map 0:v {v} {keys} -fps_mode vfr {a}";
         }
 
-        private string Inputs(RecordOptions o) =>
+        private string Inputs(RecordOptions o, RecordingAudio? sessionAudio = null) =>
             $"-init_hw_device d3d11va=capture:{o.CaptureAdapter} -filter_hw_device capture " +
-            $"-filter_complex \"{VideoInput(o)},setpts=PTS-STARTPTS[v]\" " +
+            $"-filter_complex \"{VideoInput(o)},{sessionAudio?.Clock.VideoTimestampFilter ?? "setpts=PTS-STARTPTS"}[v]\" " +
             (o.HasAudio ? "-thread_queue_size 64 -probesize 32 -analyzeduration 0 -f s16le -ar 48000 -ac 2 -i pipe:0 " : "");
 
-        private Process Launch(string args, bool withAudio, string logName, CaptureProgress progress)
+        private Process Launch(string args, RecordingAudio? sessionAudio, string logName, CaptureProgress progress)
         {
             var psi = new ProcessStartInfo(FfmpegInstaller.ExePath,
                 "-hide_banner -loglevel error -filter_buffered_frames 32 -nostats -stats_period 1 -progress pipe:1 -y " + args)
@@ -256,6 +257,8 @@ namespace GraphiteCompanion.Services
                 RedirectStandardInput = true, RedirectStandardError = true, RedirectStandardOutput = true,
             };
             var p = Process.Start(psi)!;
+            try
+            {
             job.Add(p); // ffmpeg dies together with SoundShot, even on a crash
             try { p.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
             string log = Path.Combine(SettingsStore.Folder, logName);
@@ -263,15 +266,19 @@ namespace GraphiteCompanion.Services
             p.BeginErrorReadLine();
             p.OutputDataReceived += (_, e) => progress.Observe(e.Data, Environment.TickCount64);
             p.BeginOutputReadLine();
-            if (withAudio) audio?.AddOutput(p.StandardInput.BaseStream);
+            sessionAudio?.AddOutput(p.StandardInput.BaseStream);
             return p;
+            }
+            catch
+            {
+                try { if (!p.HasExited) p.Kill(true); } catch { }
+                p.Dispose();
+                throw;
+            }
         }
 
-        private void EnsureAudio(RecordOptions o)
-        {
-            if (audio?.Failed == true) DropAudio();
-            if (audio == null && (o.SystemSound || o.Microphone)) audio = new RecordingAudio(o.SystemSound, o.Microphone);
-        }
+        private static RecordingAudio? CreateAudio(RecordOptions options) => options.HasAudio
+            ? new RecordingAudio(options.SystemSound, options.Microphone, options.MicrophoneDeviceId) : null;
 
         // ---------------- replay buffer ----------------
 
@@ -291,24 +298,33 @@ namespace GraphiteCompanion.Services
             string directory = Path.Combine(RingDir, Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
             activeRing = new ReplayRing(directory, o);
-            EnsureAudio(o);
+            try
+            {
+            bufferAudio = CreateAudio(o);
             // spare segments: saving copies the oldest ones while FFmpeg keeps writing, long replays need more room
             int wrap = o.ReplaySeconds / SegmentSeconds + Math.Max(10, o.ReplaySeconds / 10);
             // Timestamps run on continuously across the segments (no -reset_timestamps): a segment holds 46 or 47
             // AAC frames (0.98 / 1.003 s), so joining zero-based segments shifted the sound by ~20 ms every second -
             // clicks, gaps and drift in saved replays. Continuous MPEG-TS segments are simply glued byte by byte.
-            string args = Inputs(o) + Encode(o).Replace("-map 0:v", "-map [v]") +
+            string args = Inputs(o, bufferAudio) + Encode(o).Replace("-map 0:v", "-map [v]") +
                           $" -f segment -segment_time {SegmentSeconds} -segment_format mpegts -segment_wrap {wrap}" +
                           $" -segment_list_size {wrap - 1} -segment_list_type csv -segment_list \"{Path.Combine(directory, "segments.csv")}\"" +
                           $" -flush_packets 1 \"{Path.Combine(directory, "seg%04d.ts")}\"";
             bufferProgress = new CaptureProgress(Environment.TickCount64);
-            bufferProc = Launch(args, o.HasAudio, $"replay-{logSuffix}.log", bufferProgress);
+            bufferProc = Launch(args, bufferAudio, $"replay-{logSuffix}.log", bufferProgress);
+            }
+            catch
+            {
+                DropAudio(ref bufferAudio);
+                ReleaseRing(activeRing); activeRing = null; bufferProgress = null;
+                throw;
+            }
         }
 
         public void StopBuffer(bool preserve = false)
         {
             bool withAudio = activeRing?.Options.HasAudio == true;
-            StopProcessAsync(DetachProcess(ref bufferProc), withAudio, preserve ? 250 : 1500).GetAwaiter().GetResult();
+            StopProcessAsync(DetachProcess(ref bufferProc, bufferAudio), withAudio, preserve ? 250 : 1500).GetAwaiter().GetResult();
             bufferSizeCheckedAt = 0;
             bufferProgress = null;
             if (activeRing is { } ring && preserve && RingReady(ring))
@@ -323,7 +339,7 @@ namespace GraphiteCompanion.Services
                 ReleaseRing(previousRing);
                 previousRing = null;
             }
-            if (!Recording) DropAudio();
+            DropAudio(ref bufferAudio);
         }
 
         private ReplayRing? ReplayToSave => activeRing is { } ring && RingReady(ring) ? ring : previousRing;
@@ -469,31 +485,40 @@ namespace GraphiteCompanion.Services
             ObjectDisposedException.ThrowIf(disposalStarted, this);
             if (Recording || RecordingStopping) return;
             o = BindCapture(o);
-            EnsureAudio(o);
+            try
+            {
             Directory.CreateDirectory(o.Folder);
             recordRoot = o.Folder;
             recordStarted = DateTime.Now;
             recordTemp = Path.ChangeExtension(UniquePath(o.Folder, "Запись", title, recordStarted), $"{Guid.NewGuid():N}.recording.mp4");
-            string args = Inputs(o) + Encode(o).Replace("-map 0:v", "-map [v]") +
+            recordAudio = CreateAudio(o);
+            string args = Inputs(o, recordAudio) + Encode(o).Replace("-map 0:v", "-map [v]") +
                           $" -movflags +frag_keyframe+empty_moov+default_base_moof \"{recordTemp}\"";
             recordProgress = new CaptureProgress(Environment.TickCount64);
             recordHasAudio = o.HasAudio;
-            recordProc = Launch(args, recordHasAudio, $"record-{logSuffix}.log", recordProgress);
+            recordProc = Launch(args, recordAudio, $"record-{logSuffix}.log", recordProgress);
             RecordingSince = DateTime.Now;
+            }
+            catch
+            {
+                DropAudio(ref recordAudio);
+                recordRoot = recordTemp = null; recordProgress = null; recordHasAudio = false;
+                throw;
+            }
         }
 
         /// <summary>Stops and finalises the recording (fragmented → normal mp4); returns the file path.</summary>
         public async Task<string?> StopRecordingAsync(string game, bool interrupted = false)
         {
             if (recordProc == null) return null;
-            var process = DetachProcess(ref recordProc);
+            var process = DetachProcess(ref recordProc, recordAudio);
             string? temp = recordTemp, root = recordRoot;
             DateTime started = recordStarted;
             recordTemp = recordRoot = null;
             recordProgress = null;
             recordStopTask = StopProcessAsync(process, recordHasAudio, interrupted ? 250 : 1500);
             await recordStopTask;
-            if (!BufferRunning && !Recording) DropAudio();
+            DropAudio(ref recordAudio);
             if (temp == null || root == null || !File.Exists(temp)) return null;
             if (new FileInfo(temp).Length == 0) { File.Delete(temp); return null; }
             // the folder is chosen now: the game that was really played, not what happened to be in front at the start
@@ -640,12 +665,12 @@ namespace GraphiteCompanion.Services
             finally { try { File.Delete(pending); } catch (IOException) { } }
         }
 
-        private Process? DetachProcess(ref Process? p)
+        private Process? DetachProcess(ref Process? p, RecordingAudio? sessionAudio)
         {
             var proc = p;
             p = null;
             if (proc == null) return null;
-            try { audio?.RemoveOutput(proc.StandardInput.BaseStream); } catch { }
+            try { sessionAudio?.RemoveOutput(proc.StandardInput.BaseStream); } catch { }
             return proc;
         }
 
@@ -679,7 +704,7 @@ namespace GraphiteCompanion.Services
             finally { proc.Dispose(); }
         }
 
-        private void DropAudio()
+        private static void DropAudio(ref RecordingAudio? audio)
         {
             var previous = audio;
             audio = null;
@@ -712,8 +737,9 @@ namespace GraphiteCompanion.Services
             if (disposalStarted) return;
             disposalStarted = true;
             StopBuffer();
-            StopProcessAsync(DetachProcess(ref recordProc), recordHasAudio, 1500).GetAwaiter().GetResult();
-            DropAudio();
+            StopProcessAsync(DetachProcess(ref recordProc, recordAudio), recordHasAudio, 1500).GetAwaiter().GetResult();
+            DropAudio(ref bufferAudio);
+            DropAudio(ref recordAudio);
             job.Dispose();
         }
 
@@ -722,15 +748,16 @@ namespace GraphiteCompanion.Services
             if (disposalStarted) return;
             disposalStarted = true;
             bool bufferWithAudio = activeRing?.Options.HasAudio == true;
-            var buffer = DetachProcess(ref bufferProc);
-            var recording = DetachProcess(ref recordProc);
+            var buffer = DetachProcess(ref bufferProc, bufferAudio);
+            var recording = DetachProcess(ref recordProc, recordAudio);
             await Task.WhenAll(StopProcessAsync(buffer, bufferWithAudio, 250),
                 StopProcessAsync(recording, recordHasAudio, 1500), recordStopTask ?? Task.CompletedTask);
             bufferProgress = recordProgress = null;
             ReleaseRing(activeRing);
             ReleaseRing(previousRing);
             activeRing = previousRing = null;
-            DropAudio();
+            DropAudio(ref bufferAudio);
+            DropAudio(ref recordAudio);
             job.Dispose();
         }
     }

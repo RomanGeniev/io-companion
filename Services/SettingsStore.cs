@@ -75,6 +75,10 @@ namespace GraphiteCompanion.Services
         public Dictionary<string, MonitorRecordSettings>? RecordPerMonitor { get; set; } // Screen.DeviceName → own resolution / fps / quality
         public bool RecordSystemSound { get; set; } = true;
         public bool RecordMicrophone { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? RecordMicrophoneDeviceId { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? RecordMicrophoneName { get; set; }
 
         public string Theme { get; set; } = "Dark";
         public string Accent { get; set; } = "Violet";

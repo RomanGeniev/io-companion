@@ -89,7 +89,7 @@ namespace GraphiteCompanion
             "Сколько последних секунд программа постоянно держит наготове. По клавише повтора они сохраняются в ролик — " +
             "удобно, когда интересный момент уже случился. Больше секунд — больше места на диске под временный буфер.";
         private const string TipSound =
-            "Звук компьютера записывается с устройства вывода Windows по умолчанию. Голос — с микрофона Windows по умолчанию для связи. Можно включить оба. Выбор микрофона на вкладке настройки сам по себе не меняет устройство записи.";
+            "Звук компьютера записывается с устройства вывода Windows по умолчанию. Микрофон для откатов и записей выбирается здесь, отдельно от вкладки настройки микрофона. Можно включить оба источника.";
         private const string TipMonitors =
             "Мониторы пронумерованы слева направо, как они стоят в настройках Windows. Нажмите «Показать номера» — " +
             "на каждом экране появится его номер. Каждая карточка управляет одним экраном: записью, повторами, снимками и качеством.";
@@ -235,6 +235,7 @@ namespace GraphiteCompanion
 
             RecSystemSwitch.IsChecked = settings.RecordSystemSound;
             RecMicSwitch.IsChecked = settings.RecordMicrophone;
+            RefreshRecordingMicrophoneChoices();
             RecFolderText.Text = RecFolder;
             _ = OrganizeRecordingFolderAsync(RecFolder);
 
@@ -499,6 +500,7 @@ namespace GraphiteCompanion
                 Monitor = mon.Handle, MonitorBounds = mon.Bounds, RequestedHeight = r.Height,
                 Fps = r.Fps, Quality = r.Quality,
                 SystemSound = settings.RecordSystemSound, Microphone = settings.RecordMicrophone,
+                MicrophoneDeviceId = settings.RecordMicrophoneDeviceId,
                 ReplaySeconds = settings.ReplaySeconds, Folder = RecFolder,
             };
         }
@@ -508,6 +510,7 @@ namespace GraphiteCompanion
             if (!initialized) return;
             settings.RecordSystemSound = RecSystemSwitch.IsChecked == true;
             settings.RecordMicrophone = RecMicSwitch.IsChecked == true;
+            RefreshRecordingMicrophoneChoices();
             RecSettingsChanged();
         }
 
@@ -571,7 +574,11 @@ namespace GraphiteCompanion
         {
             nextReplayAttempt[monitor.Device] = Environment.TickCount64 + CaptureRetryMs;
             try { Svc(monitor).StartBuffer(BuildOptions(monitor), preserve); }
-            catch (Exception ex) { SettingsStore.LogError(ex); }
+            catch (Exception ex)
+            {
+                SettingsStore.LogError(ex);
+                SetRecorderMessage($"Не удалось запустить повтор: {monitor.Label}. {ex.Message}");
+            }
         }
 
         // ---------------- which game a file belongs to ----------------

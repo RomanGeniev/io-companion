@@ -12,12 +12,19 @@ namespace GraphiteCompanion.Controls;
 public sealed partial class SnapBoard
 {
     private Window? inspectorWindow;
-    private bool closingInspector,inspectorAppearance;
+    private bool closingInspector,inspectorAppearance,embeddedInspector;
     private string inspectorDetail="";
     private bool UsesInspector=>true;
     private readonly Stack<CanvasLayout> undo=new();
     private CanvasLayout? operationBefore;
     internal bool IsInspector(Window window)=>ReferenceEquals(window,inspectorWindow);
+    // Standalone editors already own a window; keep their actions in that same window.
+    public FrameworkElement EmbedEditorTools()
+    {
+        if(Editing)throw new InvalidOperationException("Choose embedded editor tools before editing.");
+        embeddedInspector=true;toolsLayer.Children.Remove(toolbarSurface);
+        return toolbarSurface;
+    }
     internal bool CloseSelectionList()=>false;
     private void BeginOperation(){if(Editing&&operationBefore==null)operationBefore=state.Copy();}
     private void CancelOperation(){var before=operationBefore;operationBefore=null;if(before!=null)Apply(before);}
@@ -34,6 +41,7 @@ public sealed partial class SnapBoard
     }
     private void OpenInspector()
     {
+        if(embeddedInspector)return;
         var host=Window.GetWindow(this);if(host==null||inspectorWindow!=null)return;
         toolsLayer.Children.Remove(toolbarSurface);
         var window=new Window{Title=Appearance!=null?"Изменение вида оверлея":"Изменение вида SoundShot",Owner=host,Width=560,SizeToContent=SizeToContent.Height,MaxHeight=460,WindowStyle=WindowStyle.None,ResizeMode=ResizeMode.NoResize,ShowInTaskbar=false,Topmost=host.Topmost,ShowActivated=host.ShowActivated&&host.Left>-10000,Left=host.Left,Top=host.Top};
@@ -57,7 +65,7 @@ public sealed partial class SnapBoard
     private void RenderInspector()
     {
         toolbar.Children.Clear();toolbarSurface.Visibility=Editing?Visibility.Visible:Visibility.Collapsed;root.MinHeight=64;if(!Editing)return;
-        var hint=Text("Блок — за заголовок ⠿ · кнопка — за неё саму\nРазмер — за маркеры рамки · выравнивание включено");hint.FontSize=12;hint.Margin=new Thickness(3,0,3,8);hint.SetResourceReference(TextBlock.ForegroundProperty,"SubTextBrush");toolbar.Children.Add(hint);
+        if(!embeddedInspector){var hint=Text("Блок: ⠿ — двигать · угол — масштаб · линии помогают выровнять\nВнутри: переставляйте элементы · × — скрыть · ниже — вернуть");hint.FontSize=12;hint.Margin=new Thickness(3,0,3,8);hint.SetResourceReference(TextBlock.ForegroundProperty,"SubTextBrush");toolbar.Children.Add(hint);}
         var actions=new WrapPanel();var back=Button("↶ Отменить шаг",Undo,"Отменить последнее изменение · Ctrl+Z");back.IsEnabled=undo.Count>0;actions.Children.Add(back);
         var done=Button("Готово",()=>Finish(true),"Сохранить все изменения вида");done.SetResourceReference(StyleProperty,"AccentButton");actions.Children.Add(done);actions.Children.Add(Button("Отмена",()=>Finish(false),"Вернуть вид до начала редактирования"));
         if(Appearance!=null)actions.Children.Add(Button("Прозрачность и вид",()=>{inspectorAppearance=!inspectorAppearance;inspectorDetail="";RenderInspector();}));

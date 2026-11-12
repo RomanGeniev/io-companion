@@ -32,7 +32,7 @@ namespace GraphiteCompanion.Controls
         private readonly StackPanel outputItems = new();
         private readonly Button replayButton = new(), recordButton = new(), shotButton = new(), regionButton = new();
         private readonly TextBlock title = new() { FontSize = 22, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
-        private readonly TextBlock subtitle = new() { FontSize = 12 };
+        private readonly TextBlock subtitle = new() { FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis };
         private readonly RadioButton[] modes = new RadioButton[3];
         private readonly CheckBox eqSwitch = new() { Content = "Эквалайзер" };
         private readonly Slider volume = new();
@@ -77,6 +77,7 @@ namespace GraphiteCompanion.Controls
         private const int DragMoveMessage = 0x8000 + 42;
         internal bool IsDragging => dragOffset != null;
         private bool movedByUser;
+        private bool firstPresentationPending;
         private MouseHookProc? mouseHookProc;
         private IntPtr mouseHook;
         private bool loading;
@@ -196,10 +197,11 @@ namespace GraphiteCompanion.Controls
                 source.AddHook(WindowProc);
                 int roundCorners = 2;
                 DwmSetWindowAttribute(hwnd, 33, ref roundCorners, sizeof(int));
+                ApplyNativeOpacityNow();
             };
             SizeChanged += (_, _) => ApplyNativeOpacity();
             IsVisibleChanged += (_, _) => { if(IsVisible)ApplyNativeOpacity(); };
-            ContentRendered += (_, _) => { ApplyNativeOpacity(); if (!movedByUser) PositionOverlay(); LogPresentation("rendered"); };
+            ContentRendered += (_, _) => { CompleteFirstPresentation(); ApplyNativeOpacity(); if (!movedByUser) PositionOverlay(); LogPresentation("rendered"); };
 
             // ================= header: what is playing now + keyboard / close
             subtitle.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
@@ -262,6 +264,12 @@ namespace GraphiteCompanion.Controls
             customize.Click += (_, _) => EditLayout();
             headerButtons.Children.Add(customize);
             headerButtons.Children.Add(close);
+            // One spacing rule for every header action, including the text button.
+            // Local values override theme defaults so the keyboard and editor never touch.
+            foreach(FrameworkElement action in headerButtons.Children)
+                action.Margin=new Thickness(0,0,6,0);
+            close.Margin=new Thickness(0);
+            titles.Margin=new Thickness(0,0,12,0);
             var header = new Grid();
             header.ColumnDefinitions.Add(new ColumnDefinition());
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -473,6 +481,7 @@ namespace GraphiteCompanion.Controls
             // The global keyboard hook handles Escape while the game keeps keyboard focus.
             Closed += (_, _) =>
             {
+                firstPresentationPending=false;
                 clickerLeaveTimer.Stop();
                 StopDragging();
                 nowPlaying.Dispose();
@@ -554,13 +563,23 @@ namespace GraphiteCompanion.Controls
         /// <summary>Icon + title, with the hotkey as a small line under it.</summary>
         private StackPanel Labeled(string glyph, string text, string? hotkey, bool vertical)
         {
-            var title = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = vertical ? HorizontalAlignment.Center : HorizontalAlignment.Left };
+            var title = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left };
             title.Children.Add(Glyph(glyph));
             title.Children.Add(new TextBlock { Text = text, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
             if (hotkey == null) return title;
             var sp = new StackPanel();
-            sp.Children.Add(title);
-            var hint = new TextBlock { Text = hotkey, FontSize = 11, Margin = new Thickness(0, 3, 0, 0), HorizontalAlignment = vertical ? HorizontalAlignment.Center : HorizontalAlignment.Left };
+            if (vertical)
+            {
+                // Keep the full button width for the caption, even in a narrow overlay.
+                // The icon has its own line so it cannot squeeze words into fragments.
+                var icon = Glyph(glyph); icon.HorizontalAlignment = HorizontalAlignment.Center;
+                sp.Children.Add(icon);
+                sp.Children.Add(new TextBlock { Text = text, Margin = new Thickness(0, 4, 0, 0),
+                    TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center });
+            }
+            else sp.Children.Add(title);
+            var hint = new TextBlock { Text = hotkey, FontSize = 11, Margin = new Thickness(0, 3, 0, 0),
+                TextWrapping = TextWrapping.Wrap, TextAlignment = vertical ? TextAlignment.Center : TextAlignment.Left };
             hint.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
             sp.Children.Add(hint);
             return sp;
@@ -575,6 +594,9 @@ namespace GraphiteCompanion.Controls
             Refresh();
             screenBounds = PointerScreen();
             WindowStartupLocation = WindowStartupLocation.Manual;
+            // The first HWND may still have its provisional size and background.
+            // Keep it invisible until WPF has rendered and positioned the real panel.
+            BeginFirstPresentation();
             // Create the HWND on the target monitor before measuring the panel at that monitor's DPI.
             new WindowInteropHelper(this).EnsureHandle();
             SetWindowPos(hwnd, new IntPtr(-1), screenBounds.Left + 16, screenBounds.Top + 16, 200, 200, 0x0010);
@@ -585,11 +607,31 @@ namespace GraphiteCompanion.Controls
             Show();
             UpdateLayout();
             PositionOverlay();
+            // Also handles a reused window after Hide when ContentRendered is not raised again.
+            Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle,new Action(CompleteFirstPresentation));
             mouseHookProc = OnMouseHook;
             mouseHook = SetWindowsHookExW(14 /* WH_MOUSE_LL */, mouseHookProc, GetModuleHandle(null), 0);
             if (mouseHook == IntPtr.Zero)
                 SettingsStore.LogError(new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "Overlay mouse listener"));
             LogPresentation("opened");
+        }
+
+        private void BeginFirstPresentation()
+        {
+            firstPresentationPending=true;
+            Opacity=0;
+            ApplyNativeOpacityNow();
+        }
+
+        private void CompleteFirstPresentation()
+        {
+            if(!firstPresentationPending||!IsVisible||hwnd==IntPtr.Zero)return;
+            UpdateLayout();
+            if(!movedByUser)PositionOverlay();
+            firstPresentationPending=false;
+            Opacity=1;
+            // Restore the user's native alpha after WPF changes layered-window styles.
+            ApplyNativeOpacity();
         }
 
         private bool StartDragging(DrawingPoint pointer)
@@ -706,13 +748,13 @@ namespace GraphiteCompanion.Controls
                 return IntPtr.Zero;
             }
             // HwndTarget normally strips WS_EX_LAYERED from opaque WPF windows.
-            // Preserve the system-managed constant-alpha layer only while the user requests it.
-            if (msg == 0x007C && w.ToInt64() == -20 && layout.Opacity < .999 && l != IntPtr.Zero)
+            // Preserve constant alpha while preparing the first frame or showing user transparency.
+            if (msg == 0x007C && w.ToInt64() == -20 && (firstPresentationPending || layout.Opacity < .999) && l != IntPtr.Zero)
             {
                 Marshal.WriteInt32(l, 4, Marshal.ReadInt32(l, 4) | 0x00080000);
                 handled = true; return IntPtr.Zero;
             }
-            if (msg == 0x007D && w.ToInt64() == -20 && !applyingOpacity && layout.Opacity < .999)
+            if (msg == 0x007D && w.ToInt64() == -20 && !applyingOpacity && (firstPresentationPending || layout.Opacity < .999))
                 QueueNativeOpacity(); // WM_STYLECHANGED: reconcile alpha after native/WPF style transactions.
             if (msg == 0x0021 && !IsLayoutEditing) // WM_MOUSEACTIVATE
             {
@@ -761,7 +803,7 @@ namespace GraphiteCompanion.Controls
 
             replayButton.Content = Labeled("", main.ReplayActive ? "Повтор" : "Повтор выкл.", main.HotkeyLabel("replay"), vertical: true);
             replayButton.IsEnabled = main.ReplayActive;
-            recordButton.Content = Labeled(main.RecordingActive ? "" : "", main.RecordingActive ? "Остановить" : "Запись", main.HotkeyLabel("record"), vertical: true);
+            recordButton.Content = Labeled(main.RecordingActive ? "" : "", main.RecordingActive ? "Стоп" : "Запись", main.HotkeyLabel("record"), vertical: true);
             regionButton.Content = Labeled("\uE7A7", "Область", main.HotkeyLabel("shot.region"), vertical: true);
             shotButton.Content = Labeled("", "Снимок", main.HotkeyLabel("shot"), vertical: true);
             footer.Text = $"Esc, {main.OverlayKeyText()} или клик снаружи — закрыть";
