@@ -235,7 +235,10 @@
         <RowDefinition Height="Auto" />
       </Grid.RowDefinitions>
       <StackPanel x:Name="PageHeading" Margin="0,0,0,14">
-        <TextBlock x:Name="PageTitle" Text="Звук" FontSize="26" FontWeight="SemiBold" />
+        <DockPanel>
+          <Button x:Name="CustomizeViewButton" DockPanel.Dock="Right" Content="Настроить вид" Style="{StaticResource GhostButton}" VerticalAlignment="Center" Padding="10,6" Click="CustomizeView_Click" ToolTip="Скрыть, вернуть или переставить блоки этого раздела. Значения настроек не меняются." />
+          <TextBlock x:Name="PageTitle" Text="Звук" FontSize="26" FontWeight="SemiBold" />
+        </DockPanel>
         <TextBlock x:Name="PageDescription" Text="Выберите настроение. Подстройте детали под себя." Foreground="{DynamicResource SubTextBrush}" Margin="0,5,0,0" TextWrapping="Wrap" />
         <Border x:Name="Banner" Visibility="Collapsed" Background="{DynamicResource BannerBrush}" BorderBrush="{DynamicResource BannerBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="14,10" Margin="0,0,0,12">
           <StackPanel Orientation="Horizontal">

@@ -109,6 +109,7 @@ namespace GraphiteCompanion
             InitFeatures();
             InitAutoClicker();
             RefreshPushToTalk();
+            InitViewLayout();
             HelpTips.Prepare(this);
             initialized = true;
 
@@ -267,6 +268,7 @@ namespace GraphiteCompanion
                 micCards.Add(card);
                 MicEffectsGrid.Children.Add(card);
             }
+            SyncEffectLayout();
         }
 
         private void QueueEffect(bool mic, Guid format, uint pid, int value)
@@ -493,13 +495,17 @@ namespace GraphiteCompanion
         private void Tab_Checked(object sender, RoutedEventArgs e)
         {
             string tab = (string)((FrameworkElement)sender).Tag;
+            layoutPage = tab; UpdateLayoutButton();
             PageEq.Visibility = tab == "Eq" ? Visibility.Visible : Visibility.Collapsed;
             PageEffects.Visibility = tab == "Effects" ? Visibility.Visible : Visibility.Collapsed;
             PageMic.Visibility = tab == "Mic" ? Visibility.Visible : Visibility.Collapsed;
             if (MixerPopup != null) MixerPopup.IsOpen = false;
             PageRecord.Visibility = tab == "Record" ? Visibility.Visible : Visibility.Collapsed;
             PageSettings.Visibility = tab == "Settings" ? Visibility.Visible : Visibility.Collapsed;
-            if (tab == "Gallery" && galleryPanel == null) PageGallery.Content = galleryPanel = new GalleryPanel(() => RecFolder);
+            if (tab == "Gallery" && galleryPanel == null) {
+                PageGallery.Content = galleryPanel = new GalleryPanel(() => RecFolder);
+                galleryPanel.RecordRequested += () => TabRecord.IsChecked = true;
+            }
             PageGallery.Visibility = tab == "Gallery" ? Visibility.Visible : Visibility.Collapsed;
             PageAutoClicker.Visibility = tab == "AutoClicker" ? Visibility.Visible : Visibility.Collapsed;
             OutputStrip.Visibility = tab is "Eq" or "Effects" ? Visibility.Visible : Visibility.Collapsed;
@@ -513,6 +519,7 @@ namespace GraphiteCompanion
                 "Settings" => ("Настройки", "Оформление, запуск приложения и уведомления."),
                 _ => ("Звук", "Выберите настроение. Подстройте детали под себя."),
             };
+            PageTitle.Text = NavigationName(tab, PageTitle.Text);
             if (tab == "Mic")
             {
                 if (initialized) RefreshMicrophones();
@@ -946,6 +953,7 @@ namespace GraphiteCompanion
                 if (AutoClickerState.Running) { StopAutoClicker(); return true; }
                 var current = overlay;
                 if (current is not { IsVisible: true }) return false;
+                if (current.HandleLayoutEscape()) return true;
                 if (current.HasOpenDialog) return false;
                 Dispatcher.BeginInvoke(new Action(() => { if (current.IsVisible) current.DismissFromEscape(); }));
                 return true;

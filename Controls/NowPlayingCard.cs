@@ -31,6 +31,7 @@ namespace GraphiteCompanion.Controls
         private readonly TextBlock appText = new() { FontSize = 11, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
         private readonly TextBlock titleText = new() { FontSize = 20, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 4, 0, 0) };
         private readonly TextBlock artistText = new() { FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 2, 0, 0) };
+        public ViewLayoutGroup LayoutButtons { get; private set; } = null!;
         private readonly Slider seek = new() { Margin = new Thickness(-4, 10, -4, 0) };
         private readonly TextBlock elapsedText = new() { FontSize = 11 };
         private readonly TextBlock remainText = new() { FontSize = 11, HorizontalAlignment = HorizontalAlignment.Right };
@@ -125,6 +126,9 @@ namespace GraphiteCompanion.Controls
             play.Margin = new Thickness(8, 0, 8, 0);
             buttons.Children.Add(play);
             buttons.Children.Add(next);
+
+            var buttonHost = CanvasParts.Wrap(buttons); buttonHost.MaxWidth = 350;
+            LayoutButtons = new ViewLayoutGroup("Overlay.musicButtons", "Кнопки плеера", buttonHost, "Предыдущий трек", "Пауза / пуск", "Следующий трек");
 
             // ---- seek bar
             // Some apps (Apple Music) publish a timeline but ignore the system seek command
@@ -241,8 +245,9 @@ namespace GraphiteCompanion.Controls
             Child = root;
 
             timer.Tick += async (_, _) => await Tick();
-            Loaded += async (_, _) => { timer.Start(); await Fetch(); };
+            Loaded += async (_, _) => { if (IsVisible) { timer.Start(); await Fetch(); } };
             Unloaded += (_, _) => { timer.Stop(); seekRequest?.Cancel(); };
+            IsVisibleChanged += async (_, _) => { if (IsVisible && IsLoaded && !disposed) { timer.Start(); await Fetch(); } else timer.Stop(); };
             state = MediaService.Recent;
             stateTime = state == null ? DateTime.Now : MediaService.LatestAt.ToLocalTime();
             Show();

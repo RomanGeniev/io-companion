@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -442,6 +442,7 @@ namespace GraphiteCompanion
                 MonitorPanel.Children.Add(card); recordingCards[m.Device] = card;
             }
             if (monitors.Count == 0) MonitorPanel.Children.Add(new TextBlock { Text = "Подключённые мониторы не найдены.", Margin = new Thickness(0, 12, 0, 12) });
+            SyncMonitorLayout();
             UpdateRecStatus();
         }
 
@@ -684,34 +685,26 @@ namespace GraphiteCompanion
             UpdateRecStatus();
             try
             {
-                // shoot first (so the picker itself is not in the picture), then keep only the chosen ones
-                var shots = new List<(MonitorItem m, string file)>();
                 var current = ReadMonitors();
-                var selected = current?.Where(m => targetDevice == null || m.Device == targetDevice).ToList();
-                if (selected == null || selected.Count == 0)
+                var available = current?.Where(m => targetDevice == null || m.Device == targetDevice).ToList();
+                if (available == null || available.Count == 0)
                 {
                     NotifyChange("Монитор недоступен", "", "Дождитесь появления изображения и повторите снимок");
                     return;
                 }
+                // Ask before starting any capture. Cancel creates no files and starts no FFmpeg.
+                var games = available.ToDictionary(m => m.Device, GameOn);
+                var selected = available.Count > 1
+                    ? await ChooseMonitors("Какой монитор снять?", "Выберите экраны. Снимок будет сделан после закрытия этого окна.", available)
+                    : available;
+                if (selected == null || selected.Count == 0 || recordClosed || shutdownStarted) return;
+                await Task.Delay(80); // Let the compositor remove the picker and monitor badges.
+                if (recordClosed || shutdownStarted) return;
+                var saved = new List<string>();
                 foreach (var m in selected)
                 {
-                    if (recordClosed) break;
-                    shots.Add((m, await TrackRecordingSave(Svc(m).ScreenshotAsync(BuildOptions(m), GameOn(m), m.Bounds))));
-                }
-                var keep = shots.Count > 1 && !recordClosed ? await ChooseMonitors("Какой скриншот сохранить?", "Снимки уже сделаны, лишние удалятся.", selected) : selected;
-                var saved = new List<string>();
-                foreach (var (m, file) in shots)
-                {
-                    if (keep?.Contains(m) == true) { saved.Add(file); continue; }
-                    try
-                    {
-                        File.Delete(file);
-                        // Remove only the empty game and monitor folders, keeping the chosen root.
-                        var dir = Path.GetDirectoryName(file);
-                        for (int up = 0; up < 2 && dir != null && !Directory.EnumerateFileSystemEntries(dir).Any(); up++)
-                        { Directory.Delete(dir); dir = Path.GetDirectoryName(dir); }
-                    }
-                    catch { }
+                    if (recordClosed || shutdownStarted) break;
+                    saved.Add(await TrackRecordingSave(Svc(m).ScreenshotAsync(BuildOptions(m), games[m.Device], m.Bounds)));
                 }
                 if (saved.Count == 0) return;
                 NotifyChange(saved.Count > 1 ? $"Скриншоты сохранены ({saved.Count})" : "Скриншот сохранён", "",

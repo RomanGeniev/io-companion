@@ -13,7 +13,7 @@
     <Description>SoundShot</Description>
     <RootNamespace>GraphiteCompanion</RootNamespace>
     <Product>SoundShot</Product>
-    <Version>2.2.28</Version>
+    <Version>2.2.38</Version>
     <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <NoWarn>$(NoWarn);WPF0001</NoWarn>

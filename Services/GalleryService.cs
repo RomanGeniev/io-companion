@@ -9,7 +9,11 @@ using System.Windows.Media.Imaging;
 
 namespace GraphiteCompanion.Services
 {
-    public sealed record GalleryItem(string Path, string Name, string Folder, bool Video, DateTime Modified, long Bytes);
+    public sealed record GalleryItem(string Path, string Name, string Folder, bool Video, DateTime Modified, long Bytes)
+    {
+        public string Monitor { get; init; } = "Без монитора";
+        public string Application { get; init; } = "Без приложения";
+    }
     public sealed record GalleryScan(IReadOnlyList<GalleryItem> Items, bool Limited, bool Missing);
 
     public static class GalleryService
@@ -38,6 +42,9 @@ namespace GraphiteCompanion.Services
                     if (file.Length == 0) continue;
                     string folder = System.IO.Path.GetDirectoryName(System.IO.Path.GetRelativePath(root, path)) ?? "";
                     var item = new GalleryItem(path, System.IO.Path.GetFileNameWithoutExtension(path), folder.Replace('\\', '·').Replace("·", " · "), file.Extension.Equals(".mp4", StringComparison.OrdinalIgnoreCase), file.LastWriteTimeUtc, file.Length);
+                    var parts = folder.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+                    bool hasMonitor = parts.Length > 0 && (System.Text.RegularExpressions.Regex.IsMatch(parts[0], @"^Монитор [1-9]\d*$") || parts[0] == "Несколько мониторов");
+                    item = item with { Monitor = hasMonitor ? parts[0] : "Без монитора", Application = parts.Length > (hasMonitor ? 1 : 0) ? parts[hasMonitor ? 1 : 0] : "Без приложения" };
                     latest.Enqueue(item, item.Modified.Ticks); found++;
                     if (latest.Count > 500) latest.Dequeue();
                 }
@@ -47,7 +54,7 @@ namespace GraphiteCompanion.Services
             return new(latest.UnorderedItems.Select(x => x.Element).OrderByDescending(x => x.Modified).ThenBy(x => x.Path, StringComparer.OrdinalIgnoreCase).ToArray(), found > 500, false);
         }
 
-        public static async Task<BitmapSource?> ThumbnailAsync(GalleryItem item, CancellationToken token)
+        public static async Task<BitmapSource?> ThumbnailAsync(GalleryItem item, CancellationToken token, double positionSeconds = 0, int width = 320)
         {
             try
             {
@@ -61,7 +68,8 @@ namespace GraphiteCompanion.Services
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
                 timeout.CancelAfter(TimeSpan.FromSeconds(5));
                 var start = new ProcessStartInfo(FfmpegInstaller.ExePath) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-                foreach (string arg in new[] { "-hide_banner", "-loglevel", "error", "-nostdin", "-filter_threads", "1", "-threads", "1", "-protocol_whitelist", "file,pipe", "-i", item.Path, "-map", "0:v:0", "-frames:v", "1", "-an", "-vf", "scale=320:180:force_original_aspect_ratio=decrease", "-threads", "1", "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1" }) start.ArgumentList.Add(arg);
+                width = Math.Clamp(width, 320, 1920);
+                foreach (string arg in new[] { "-hide_banner", "-loglevel", "error", "-nostdin", "-filter_threads", "1", "-threads", "1", "-protocol_whitelist", "file,pipe", "-ss", Math.Max(0, positionSeconds).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), "-i", item.Path, "-map", "0:v:0", "-frames:v", "1", "-an", "-vf", $"scale={width}:{width * 9 / 16}:force_original_aspect_ratio=decrease", "-threads", "1", "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1" }) start.ArgumentList.Add(arg);
                 using var process = new Process { StartInfo = start };
                 process.Start();
                 try
@@ -77,7 +85,7 @@ namespace GraphiteCompanion.Services
                     }
                     await process.WaitForExitAsync(timeout.Token); await error;
                     if (process.ExitCode != 0 || output.Length == 0) return null;
-                    output.Position = 0; return Decode(output);
+                    output.Position = 0; return Decode(output, width);
                 }
                 finally { if (!process.HasExited) { process.Kill(); await process.WaitForExitAsync(); } }
             }
@@ -86,10 +94,10 @@ namespace GraphiteCompanion.Services
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or System.Runtime.InteropServices.COMException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { return null; }
         }
 
-        private static BitmapSource Decode(Stream stream)
+        private static BitmapSource Decode(Stream stream, int width = 320)
         {
             var bitmap = new BitmapImage(); bitmap.BeginInit(); bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.DecodePixelWidth = 320; bitmap.StreamSource = stream; bitmap.EndInit(); bitmap.Freeze(); return bitmap;
+            bitmap.DecodePixelWidth = width; bitmap.StreamSource = stream; bitmap.EndInit(); bitmap.Freeze(); return bitmap;
         }
 
         public static string SaveRegionPng(BitmapSource image, string folder, DateTime timestamp)

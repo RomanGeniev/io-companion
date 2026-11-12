@@ -23,7 +23,7 @@ namespace GraphiteCompanion.Controls
     /// (mode, equalizer, volume, microphone, output device), recording and per-program volume on the right.
     /// Drag the header to move it; Esc, the hotkey or a click outside closes it.
     /// </summary>
-    public sealed class OverlayWindow : Window
+    public sealed partial class OverlayWindow : Window
     {
         private readonly MainWindow main;
         private readonly StackPanel apps = new();
@@ -58,7 +58,7 @@ namespace GraphiteCompanion.Controls
         private readonly DispatcherTimer clickerLeaveTimer = new(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(230) };
         private bool clickerLeaveArmed;
         private readonly VoiceQuickCard voiceCard;
-        internal bool HasOpenDialog => OwnedWindows.Cast<Window>().Any(w => w.IsVisible);
+        internal bool HasOpenDialog => IsLayoutEditing || OwnedWindows.Cast<Window>().Any(w => w.IsVisible);
         internal bool ActivateOwnedDialog()
         {
             var dialog = OwnedWindows.Cast<Window>().FirstOrDefault(w => w.IsVisible);
@@ -197,7 +197,9 @@ namespace GraphiteCompanion.Controls
                 int roundCorners = 2;
                 DwmSetWindowAttribute(hwnd, 33, ref roundCorners, sizeof(int));
             };
-            ContentRendered += (_, _) => { if (!movedByUser) PositionOverlay(); LogPresentation("rendered"); };
+            SizeChanged += (_, _) => ApplyNativeOpacity();
+            IsVisibleChanged += (_, _) => { if(IsVisible)ApplyNativeOpacity(); };
+            ContentRendered += (_, _) => { ApplyNativeOpacity(); if (!movedByUser) PositionOverlay(); LogPresentation("rendered"); };
 
             // ================= header: what is playing now + keyboard / close
             subtitle.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
@@ -221,7 +223,7 @@ namespace GraphiteCompanion.Controls
             timerButton.Margin = new Thickness(0, 0, 4, 0);
             System.Windows.Automation.AutomationProperties.SetName(timerButton, "Показать или скрыть таймер");
             HelpTips.Set(timerButton, "Показать или скрыть таймер. Скрытие не останавливает отсчёт; выбор сохраняется при закрытии оверлея.");
-            timerButton.Click += (_, _) => main.CountdownTimer.ToggleVisibility();
+            timerButton.Click += (_, _) => ToggleLayoutTimer();
             clickerButton.Content = Glyph("\uE962", 15);
             clickerButton.Padding = new Thickness(10, 8, 10, 8);
             clickerButton.Margin = new Thickness(0, 0, 4, 0);
@@ -254,6 +256,11 @@ namespace GraphiteCompanion.Controls
             headerButtons.Children.Add(timerButton);
             headerButtons.Children.Add(clickerButton);
             headerButtons.Children.Add(keys);
+            var customize = new Button { Content = "Изменить вид", Padding = new Thickness(10, 8, 10, 8), ToolTip = "Настроить оверлей" };
+            customize.SetResourceReference(StyleProperty, "GhostButton");
+            System.Windows.Automation.AutomationProperties.SetName(customize, "Настроить оверлей");
+            customize.Click += (_, _) => EditLayout();
+            headerButtons.Children.Add(customize);
             headerButtons.Children.Add(close);
             var header = new Grid();
             header.ColumnDefinitions.Add(new ColumnDefinition());
@@ -433,37 +440,29 @@ namespace GraphiteCompanion.Controls
             right.Children.Add(Section("ГРОМКОСТЬ ПРОГРАММ"));
             right.Children.Add(appsScroll);
 
-            // ================= assemble
-            var columns = new Grid { Margin = new Thickness(0, 6, 0, 0) };
-            columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
-            columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            columns.Children.Add(left);
-            Grid.SetColumn(right, 2);
-            columns.Children.Add(right);
-
-            footer.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
-
-            var body = new StackPanel { Margin = new Thickness(30, 0, 30, 18) };
+            // ================= configurable blocks
             nowPlaying = new NowPlayingCard(main);
-            body.Children.Add(nowPlaying);
-            body.Children.Add(columns);
-            body.Children.Add(footer);
-            var content2 = new StackPanel();
-            content2.Children.Add(dragArea);
-            content2.Children.Add(body);
+            layout = main.GetOverlayLayout();
+            InitializeBlocks(left, right, modeBox, eqRow, volRow, recRow, appsScroll);
+            overlayBoard.ModeChanged += () => { openApp.IsEnabled = timerButton.IsEnabled = clickerButton.IsEnabled = keys.IsEnabled = !IsLayoutEditing; };
+            footer.SetResourceReference(TextBlock.ForegroundProperty, "SubTextBrush");
+            var layoutDock = new DockPanel(); layoutContent = layoutDock;
+            DockPanel.SetDock(dragArea, Dock.Top); layoutDock.Children.Add(dragArea);
+            footer.Margin = new Thickness(30, 0, 30, 12); DockPanel.SetDock(footer, Dock.Bottom); layoutDock.Children.Add(footer);
+            DockPanel.SetDock(clickerPopup, Dock.Bottom); layoutDock.Children.Add(clickerPopup);
+            overlayBoard.Margin = new Thickness(24, 0, 24, 8); layoutDock.Children.Add(overlayBoard);
 
             var panel = new Border
             {
                 CornerRadius = new CornerRadius(0), BorderThickness = new Thickness(1),
-                HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Top,
-                Child = content2,
+                HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch,
+                Child = layoutContent,
             };
             panel.SetResourceReference(Border.BackgroundProperty, "CardBrush");
             panel.SetResourceReference(Border.BorderBrushProperty, "CardBorderBrush");
             panel.MouseLeftButtonDown += (_, _) => outputPopup.IsOpen = false;
-            Content = new ScrollViewer { Content = panel, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            Content = panel;
+            ApplyLayout(layout);
             PreviewKeyDown += (_, e) =>
             {
                 if (e.Key != Key.Escape) return;
@@ -536,7 +535,7 @@ namespace GraphiteCompanion.Controls
 
         private void RefreshTimerVisibility()
         {
-            bool shown = main.CountdownTimer.IsShown;
+            bool shown = main.CountdownTimer.IsShown && (layout?.Blocks.FirstOrDefault(x => x.Id == "timer")?.Visible ?? true);
             timerCard.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
             timerButton.SetResourceReference(StyleProperty, shown ? "AccentButton" : "GhostButton");
             System.Windows.Automation.AutomationProperties.SetItemStatus(timerButton, shown ? "Таймер показан" : "Таймер скрыт");
@@ -580,9 +579,9 @@ namespace GraphiteCompanion.Controls
             new WindowInteropHelper(this).EnsureHandle();
             SetWindowPos(hwnd, new IntPtr(-1), screenBounds.Left + 16, screenBounds.Top + 16, 200, 200, 0x0010);
             double scale = Math.Max(96, GetDpiForWindow(hwnd)) / 96.0;
-            Width = Math.Min(960, Math.Max(1, (screenBounds.Width - 32) / scale));
+            Width = Math.Min(layout.Width * layout.Scale, Math.Max(1, (screenBounds.Width - 32) / scale));
             MaxHeight = Math.Max(1, (screenBounds.Height - 32) / scale);
-            Opacity = 1;
+            ApplyNativeOpacity();
             Show();
             UpdateLayout();
             PositionOverlay();
@@ -643,6 +642,7 @@ namespace GraphiteCompanion.Controls
             dragMovePosted = endingDrag = false;
             if (dragArea.IsMouseCaptured) dragArea.ReleaseMouseCapture();
             nowPlaying.SetPanelMoving(false);
+            RememberLayoutPosition();
         }
 
         private IntPtr OnMouseHook(int code, IntPtr message, IntPtr data)
@@ -705,7 +705,16 @@ namespace GraphiteCompanion.Controls
                 }
                 return IntPtr.Zero;
             }
-            if (msg == 0x0021) // WM_MOUSEACTIVATE
+            // HwndTarget normally strips WS_EX_LAYERED from opaque WPF windows.
+            // Preserve the system-managed constant-alpha layer only while the user requests it.
+            if (msg == 0x007C && w.ToInt64() == -20 && layout.Opacity < .999 && l != IntPtr.Zero)
+            {
+                Marshal.WriteInt32(l, 4, Marshal.ReadInt32(l, 4) | 0x00080000);
+                handled = true; return IntPtr.Zero;
+            }
+            if (msg == 0x007D && w.ToInt64() == -20 && !applyingOpacity && layout.Opacity < .999)
+                QueueNativeOpacity(); // WM_STYLECHANGED: reconcile alpha after native/WPF style transactions.
+            if (msg == 0x0021 && !IsLayoutEditing) // WM_MOUSEACTIVATE
             {
                 handled = true;
                 return new IntPtr(3); // MA_NOACTIVATE
@@ -717,8 +726,9 @@ namespace GraphiteCompanion.Controls
         {
             if (!IsVisible || hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out var rect)) return;
             int width = rect.Right - rect.Left, height = rect.Bottom - rect.Top;
-            SetWindowPos(hwnd, new IntPtr(-1), screenBounds.Left + (screenBounds.Width - width) / 2,
-                screenBounds.Top + (screenBounds.Height - height) / 2, 0, 0,
+            double x = layout.RememberPosition ? layout.X ?? .5 : .5, y = layout.RememberPosition ? layout.Y ?? .5 : .5;
+            SetWindowPos(hwnd, new IntPtr(-1), screenBounds.Left + (int)(Math.Max(0, screenBounds.Width - width) * x),
+                screenBounds.Top + (int)(Math.Max(0, screenBounds.Height - height) * y), 0, 0,
                 0x0001 | 0x0010 | 0x0040); // NOSIZE | NOACTIVATE | SHOWWINDOW
         }
 

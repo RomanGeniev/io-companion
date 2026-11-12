@@ -612,17 +612,32 @@ namespace GraphiteCompanion.Services
         /// <summary>Screenshot of one monitor as PNG in the game's folder (FFmpeg sees games that GDI shows black).</summary>
         public async Task<string> ScreenshotAsync(RecordOptions o, string game, System.Drawing.Rectangle bounds)
         {
-            string path = UniquePath(o.Folder, "Скриншот", game, DateTime.Now, ".png");
-            if (FfmpegInstaller.Installed)
+            DateTime when = DateTime.Now;
+            string target = UniquePath(o.Folder, "Скриншот", game, when, ".png");
+            string pending = Path.Combine(Path.GetDirectoryName(target)!, ".shot-" + Guid.NewGuid().ToString("N") + ".png");
+            try
             {
-                int code = await FfmpegInstaller.RunAsync(
-                    $"-y -filter_complex \"gfxcapture=hmonitor={(ulong)o.Monitor}:max_framerate=5:capture_cursor=0,hwdownload,format=bgra[v]\" -map [v] -frames:v 1 \"{path}\"", 10000);
-                if (code == 0 && File.Exists(path) && new FileInfo(path).Length > 0) return path;
+                bool captured = false;
+                if (FfmpegInstaller.Installed)
+                {
+                    int code = await FfmpegInstaller.RunAsync(
+                        $"-y -filter_complex \"gfxcapture=hmonitor={(ulong)o.Monitor}:max_framerate=5:capture_cursor=0,hwdownload,format=bgra[v]\" -map [v] -frames:v 1 \"{pending}\"", 2500);
+                    captured = code == 0 && File.Exists(pending) && new FileInfo(pending).Length > 0;
+                }
+                if (!captured) await Task.Run(() =>
+                {
+                    using var bmp = new System.Drawing.Bitmap(bounds.Width, bounds.Height);
+                    using (var g = System.Drawing.Graphics.FromImage(bmp)) g.CopyFromScreen(bounds.Location, System.Drawing.Point.Empty, bounds.Size);
+                    bmp.Save(pending, System.Drawing.Imaging.ImageFormat.Png);
+                });
+                while (true)
+                {
+                    target = UniquePath(o.Folder, "Скриншот", game, when, ".png");
+                    try { File.Move(pending, target); return target; }
+                    catch (IOException) when (File.Exists(target)) { }
+                }
             }
-            using var bmp = new System.Drawing.Bitmap(bounds.Width, bounds.Height);
-            using (var g = System.Drawing.Graphics.FromImage(bmp)) g.CopyFromScreen(bounds.Location, System.Drawing.Point.Empty, bounds.Size);
-            bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
-            return path;
+            finally { try { File.Delete(pending); } catch (IOException) { } }
         }
 
         private Process? DetachProcess(ref Process? p)

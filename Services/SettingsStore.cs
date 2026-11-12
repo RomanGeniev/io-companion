@@ -44,6 +44,7 @@ namespace GraphiteCompanion.Services
         public bool MinimizeToTray { get; set; } = true;
         public bool SidebarCollapsed { get; set; }
         public int NavigationLayoutVersion { get; set; }
+        public List<NavigationItem>? Navigation { get; set; }
         public bool Notifications { get; set; } = true;
 
         /// <summary>Hotkeys changed by the user: action id → "modifiers:virtualKey".</summary>
@@ -80,6 +81,9 @@ namespace GraphiteCompanion.Services
         public string CustomAccent { get; set; } = "#22D3EE";
         public bool PushToTalk { get; set; }
         public AutoClickerSettings? AutoClicker { get; set; } = new();
+        public OverlayLayout? Overlay { get; set; } = new();
+        public Dictionary<string, CanvasLayout>? CanvasLayouts { get; set; } = new();
+        public Dictionary<string, List<GraphiteCompanion.Controls.ViewBlockSetting>>? ViewBlocks { get; set; } = new();
         public bool CheckUpdates { get; set; } = true;
         public string? SkippedVersion { get; set; }
 

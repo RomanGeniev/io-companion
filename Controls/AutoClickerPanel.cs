@@ -31,6 +31,7 @@ namespace GraphiteCompanion.Controls
         private bool syncing, recording, subscribed;
         private int pickSeconds;
         public event Action? SettingsRequested;
+        public System.Collections.Generic.List<ViewLayoutGroup> LayoutGroups { get; } = new();
 
         public AutoClickerPanel(MainWindow main, bool compact)
         {
@@ -102,6 +103,8 @@ namespace GraphiteCompanion.Controls
                 var left = new StackPanel(); left.Children.Add(Box(clicks, "КЛИКИ")); left.Children.Add(Box(launch, "УПРАВЛЕНИЕ"));
                 var right = new StackPanel(); right.Children.Add(Box(repeats, "ПОВТОРЫ")); right.Children.Add(Box(location, "ПОЗИЦИЯ"));
                 editable.Children.Add(Pair(left, right));
+                LayoutGroups.Add(new ViewLayoutGroup("AutoClicker.left", "Слева", left, "Клики", "Управление"));
+                LayoutGroups.Add(new ViewLayoutGroup("AutoClicker.right", "Справа", right, "Повторы", "Позиция"));
             }
             root.Children.Add(editable);
             if (compact)
@@ -164,6 +167,32 @@ namespace GraphiteCompanion.Controls
             };
             IsVisibleChanged += (_, _) => { if (!IsVisible) { EndRecording(); CancelPick(); main.SetAutoClickerEditorValid(this, true); shown = null; } else Refresh(); };
             Refresh();
+        }
+
+        public CanvasCard[] CreateCanvasCards()
+        {
+            var result = new[] {
+                new CanvasCard("AutoClicker.clicks", "Клики", LayoutGroups[0].Take(0), 1),
+                new CanvasCard("AutoClicker.launch", "Управление", LayoutGroups[0].Take(1), 1),
+                new CanvasCard("AutoClicker.repeat", "Повторы", LayoutGroups[1].Take(0), 2),
+                new CanvasCard("AutoClicker.position", "Позиция", LayoutGroups[1].Take(1), 2)
+            };
+            string[][] names = { new[] { "Интервал и задержка", "Кнопка и тип клика" }, new[] { "Режим запуска", "Горячая клавиша", "Индикатор" }, new[] { "Количество повторов", "Ограничение времени" }, new[] { "Режим позиции", "Координаты", "Выбор точки" } };
+            for (int i = 0; i < result.Length; i++) {
+                var body = (StackPanel)((StackPanel)((Border)result[i].Element).Child).Children[1];
+                if (i == 0) CanvasParts.Join(body, 0, 2);
+                if (i == 1) CanvasParts.Join(body, 1, 2);
+                result[i].Inside.Add(new ViewLayoutGroup(result[i].Id + ".elements", "Элементы", body, names[i]));
+            }
+            return result;
+        }
+        public void MountCanvas(SnapBoard board)
+        {
+            editable.Children.Clear();
+            var root = (StackPanel)Content; var children = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Cast<UIElement>(root.Children)); root.Children.Clear();
+            var dock = new DockPanel();
+            foreach (var child in children) if (child != editable) { DockPanel.SetDock(child, child == error ? Dock.Bottom : Dock.Top); dock.Children.Add(child); }
+            dock.Children.Add(board); Content = dock;
         }
 
         private void CancelPick()

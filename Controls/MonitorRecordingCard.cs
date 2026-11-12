@@ -18,7 +18,7 @@ public sealed class MonitorRecordingCard : Border
 
     public MonitorRecordingCard(string title, string details)
     {
-        CornerRadius = new CornerRadius(12); Padding = new Thickness(12); Margin = new Thickness(0, 0, 10, 10);
+        CornerRadius = new CornerRadius(12); Padding = new Thickness(12); Margin = new Thickness(0, 0, 10, 10); MinWidth = 280;
         BorderThickness = new Thickness(1); SetResourceReference(BackgroundProperty, "CardBrush"); SetResourceReference(BorderBrushProperty, "CardBorderBrush"); Child = root;
         root.Children.Add(new TextBlock { Text = title, FontSize = 16, FontWeight = FontWeights.SemiBold });
         var subtitle = new TextBlock { Text = details, FontSize = 11, TextWrapping = TextWrapping.Wrap, Height = 20, Margin = new Thickness(0, 4, 0, 6) };
@@ -38,6 +38,10 @@ public sealed class MonitorRecordingCard : Border
     private static Button ActionButton(string text, string style, Action action)
     {
         var b = new Button { Content = text, FontSize = 12, Padding = new Thickness(8, 7, 8, 7) };
+        var label = new FrameworkElementFactory(typeof(TextBlock));
+        label.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding());
+        label.SetValue(TextBlock.TextWrappingProperty, TextWrapping.Wrap); label.SetValue(TextBlock.TextAlignmentProperty, TextAlignment.Center);
+        b.ContentTemplate = new DataTemplate { VisualTree = label };
         b.SetResourceReference(StyleProperty, style); b.Click += (_, _) => action(); return b;
     }
     public void AddQuality(string label, IEnumerable<Choice> options, int selected, string help, Action<int> changed)
@@ -54,10 +58,12 @@ public sealed class MonitorRecordingCard : Border
     public void Complete()
     {
         var repeatArea = new StackPanel(); repeatArea.Children.Add(repeat); repeatArea.Children.Add(status);
+        AutomationProperties.SetName(repeatArea,"Повторы и состояние");
         var inset = new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(8), Margin = new Thickness(0, 4, 0, 10), Child = repeatArea };
         inset.SetResourceReference(BackgroundProperty, "InsetBrush"); root.Children.Add(inset);
         root.Children.Add(save);
         var actions = new Grid { Margin = new Thickness(0, 6, 0, 0) };
+        AutomationProperties.SetName(actions,"Запись и снимок");
         actions.ColumnDefinitions.Add(new ColumnDefinition()); actions.ColumnDefinitions.Add(new ColumnDefinition());
         record.Margin = new Thickness(0, 0, 3, 0); shot.Margin = new Thickness(3, 0, 0, 0); Grid.SetColumn(shot, 1);
         actions.Children.Add(record); actions.Children.Add(shot); root.Children.Add(actions);

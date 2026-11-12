@@ -17,6 +17,7 @@ namespace GraphiteCompanion.Controls
         public EffectDef Definition { get; }
 
         private readonly CheckBox enableSwitch;
+        private readonly TextBlock effectIcon;
         private readonly StackPanel body = new();
         private readonly Dictionary<uint, Slider> sliders = new();
         private readonly Dictionary<uint, TextBlock> valueTexts = new();
@@ -37,20 +38,22 @@ namespace GraphiteCompanion.Controls
 
             // Header: icon, title, description, switch
             var header = new Grid();
+            System.Windows.Automation.AutomationProperties.SetName(header,"Включение эффекта");
+            System.Windows.Automation.AutomationProperties.SetName(body,"Параметры эффекта");
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             header.ColumnDefinitions.Add(new ColumnDefinition());
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
+            effectIcon = new TextBlock {
+                Text = def.Icon, FontFamily = (FontFamily)Res("IconFont"), FontSize = 15,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            };
+            effectIcon.SetResourceReference(TextBlock.ForegroundProperty,"AccentBrush");
             var iconBox = new Border
             {
                 Width = 28, Height = 28, CornerRadius = new CornerRadius(10),
                 Background = (Brush)Res("InsetBrush"), VerticalAlignment = VerticalAlignment.Top,
-                Child = new TextBlock
-                {
-                    Text = def.Icon, FontFamily = (FontFamily)Res("IconFont"), FontSize = 15,
-                    Foreground = (Brush)Res("AccentBrush"),
-                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
-                },
+                Child = effectIcon,
             };
             header.Children.Add(iconBox);
 
@@ -79,6 +82,7 @@ namespace GraphiteCompanion.Controls
                 root.Children.Add(body);
                 foreach (var p in def.Params) AddParam(p);
             }
+            UpdateLook();
         }
 
         private void AddParam(EffectParam p)
@@ -94,9 +98,10 @@ namespace GraphiteCompanion.Controls
                 _ => "Интенсивность этого эффекта. Меняйте небольшими шагами и сравнивайте результат на одном и том же фрагменте.",
             };
             explanation = Definition.Title + ": " + p.Label + ". " + explanation + " Применяется, только когда эффект включён.";
+            var unit = new StackPanel(); body.Children.Add(unit);
             var labelRow = new Grid { Margin = new Thickness(0, 8, 0, 4) };
             labelRow.Children.Add(new TextBlock { Text = p.Label, FontSize = 12, Foreground = (Brush)Res("SubTextBrush") });
-            body.Children.Add(labelRow);
+            unit.Children.Add(labelRow);
 
             if (p.Options != null)
             {
@@ -111,7 +116,7 @@ namespace GraphiteCompanion.Controls
                     return rb;
                 }).ToArray();
                 optionButtons[p.Pid] = buttons;
-                body.Children.Add(new Border
+                unit.Children.Add(new Border
                 {
                     Background = (Brush)Res("InsetBrush"), CornerRadius = new CornerRadius(10),
                     Padding = new Thickness(4), Child = grid,
@@ -144,7 +149,7 @@ namespace GraphiteCompanion.Controls
                 e.Handled = true;
             };
             sliders[p.Pid] = slider;
-            body.Children.Add(slider);
+            unit.Children.Add(slider);
         }
 
         /// <summary>Shows the values currently stored in the driver (or defaults when missing).</summary>
@@ -190,6 +195,12 @@ namespace GraphiteCompanion.Controls
             Opacity = available ? 1 : 0.45;
         }
 
-        private void UpdateLook() => body.Opacity = enableSwitch.IsChecked == true ? 1 : 0.5;
+        private void UpdateLook()
+        {
+            // Parameters remain editable while bypassed: keep their names and stored
+            // values readable. The switch and icon carry the enabled state instead.
+            body.Opacity = 1;
+            effectIcon.SetResourceReference(TextBlock.ForegroundProperty,enableSwitch.IsChecked == true ? "AccentBrush" : "SubTextBrush");
+        }
     }
 }
