@@ -95,7 +95,7 @@ public sealed partial class SnapBoard : UserControl
         columns.Children.Add(left); Grid.SetColumn(right, 2); columns.Children.Add(right);
         // Reserve the scrollbar gutter in normal and edit mode alike. Otherwise the
         // first growing card can create a scrollbar and unexpectedly shrink itself.
-        scroll = new ScrollViewer { Template = BoardScrollTemplate, Content = body, Background = Brushes.Transparent, AllowDrop = true, VerticalScrollBarVisibility = ScrollBarVisibility.Visible, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        scroll = new ScrollViewer { Template = BoardScrollTemplate, Content = body, Background = Brushes.Transparent, AllowDrop = true, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         root.Children.Add(scroll);root.Children.Add(placementGuides); toolsLayer.Children.Add(toolbarSurface); root.Children.Add(toolsLayer);
         foreach (var pair in new[] { (libraryPopup, library), (optionsPopup, options) }) {
             var frame = new Border { Child = new ScrollViewer { Content = pair.Item2, MaxHeight = 240, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }, Padding = new Thickness(10), CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1), MaxWidth = 480 };
@@ -272,7 +272,7 @@ public sealed partial class SnapBoard : UserControl
     private void BeginDrag()
     {
         dragOriginal = state.Copy(); dragWidth = scroll.ActualWidth;
-        dragSlots = state.Blocks.Where(b => b.Visible && tiles.ContainsKey(b.Id) && tiles[b.Id].ActualHeight > 1)
+        dragSlots = state.Blocks.Where(b => b.Visible && tiles.ContainsKey(b.Id) && tiles[b.Id].HasLayoutContent && tiles[b.Id].ActualHeight > 1)
             .ToDictionary(b => b.Id, b => new Rect(tiles[b.Id].TranslatePoint(new Point(), body), tiles[b.Id].RenderSize));
         if(!SingleColumn)placementBaseline=PositionedSnapshot();
     }

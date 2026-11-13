@@ -15,6 +15,7 @@ public sealed class EditTile : Border
 {
     internal sealed record Payload(object Scope,string Id,string Name,double Height);
     public FrameworkElement Element {get;}
+    internal bool HasLayoutContent => Element.Visibility != Visibility.Collapsed && Element.DesiredSize.Height > .01;
     private readonly Grid surface=new();
     private readonly Grid proportionalContent=new();
     private readonly UniformBlockHost proportionalHost=new();

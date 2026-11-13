@@ -39,7 +39,7 @@ public sealed partial class SnapBoard
         if(next.DesignWidth<=0||canvas.ActualWidth>next.DesignWidth)next.DesignWidth=Math.Max(1,canvas.ActualWidth);
         foreach(var b in next.Blocks.Where(b=>b.Visible&&tiles.ContainsKey(b.Id)))
         {
-            var tile=tiles[b.Id];if(tile.ActualWidth<=1)continue;
+            var tile=tiles[b.Id];if(!tile.HasLayoutContent||tile.ActualWidth<=1)continue;
             var point=tile.TranslatePoint(new Point(),body);
             b.Position=new(){X=point.X/fit,Y=point.Y/fit};
             if(!b.Size.Proportional)

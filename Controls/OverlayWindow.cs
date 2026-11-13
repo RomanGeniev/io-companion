@@ -73,7 +73,6 @@ namespace GraphiteCompanion.Controls
         private DrawingPoint lastDragPointer;
         private DrawingPoint pendingDragPointer;
         private bool dragMovePosted, endingDrag;
-        private int dragReleaseMessage;
         private const int DragMoveMessage = 0x8000 + 42;
         internal bool IsDragging => dragOffset != null;
         private bool movedByUser;
@@ -296,8 +295,9 @@ namespace GraphiteCompanion.Controls
             dragArea.PreviewMouseMove += (_, e) =>
             {
                 if (dragOffset == null) return;
-                // The hook is authoritative; WPF may deliver an older move after it.
-                if (mouseHook == IntPtr.Zero) QueueDragMove(Pointer());
+                // Captured input is the single drag stream, including redirected mouse
+                // input. Read the current physical pointer instead of queued coordinates.
+                QueueDragMove(Pointer(), released: e.LeftButton != MouseButtonState.Pressed);
                 e.Handled = true;
             };
             dragArea.LostMouseCapture += (_, _) =>
@@ -636,16 +636,15 @@ namespace GraphiteCompanion.Controls
 
         private bool StartDragging(DrawingPoint pointer)
         {
-            if (!IsVisible || !GetWindowRect(hwnd, out var rect)) return false;
+            if (IsDragging || !IsVisible || !GetWindowRect(hwnd, out var rect)) return false;
             dragOffset = new DrawingPoint(pointer.X - rect.Left, pointer.Y - rect.Top);
             lastDragPointer = pointer;
             pendingDragPointer = pointer;
-            dragReleaseMessage = Forms.SystemInformation.MouseButtonsSwapped ? 0x0205 : 0x0202;
             endingDrag = false;
             movedByUser = true;
             outputPopup.IsOpen = false;
             nowPlaying.SetPanelMoving(true);
-            if (!dragArea.CaptureMouse() && mouseHook == IntPtr.Zero)
+            if (!dragArea.CaptureMouse())
             {
                 StopDragging();
                 return false;
@@ -689,16 +688,13 @@ namespace GraphiteCompanion.Controls
 
         private IntPtr OnMouseHook(int code, IntPtr message, IntPtr data)
         {
-            // Synthetic clicks must not dismiss or drag the settings overlay.
+            // Synthetic clicks must not dismiss the overlay. Header dragging is
+            // handled by captured WPF input, independently of this desktop listener.
             if (code == 0 && (Marshal.ReadInt32(data, 12) & 1) != 0) return CallNextHookEx(mouseHook, code, message, data);
             if (code == 0)
             {
-                // Read screen pixels directly so drag speed is independent of monitor DPI.
                 int kind = message.ToInt32();
-                if (dragOffset != null && (kind == 0x0200 || kind == dragReleaseMessage))
-                    QueueDragMove(new DrawingPoint(Marshal.ReadInt32(data), Marshal.ReadInt32(data, 4)),
-                        released: kind == dragReleaseMessage);
-                else if (kind is 0x0201 or 0x0204 or 0x0207 or 0x020B)
+                if (kind is 0x0201 or 0x0204 or 0x0207 or 0x020B)
                     OnDesktopPress(new DrawingPoint(Marshal.ReadInt32(data), Marshal.ReadInt32(data, 4)));
             }
             return CallNextHookEx(mouseHook, code, message, data);
@@ -766,7 +762,7 @@ namespace GraphiteCompanion.Controls
 
         private void PositionOverlay()
         {
-            if (!IsVisible || hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out var rect)) return;
+            if (IsDragging || !IsVisible || hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out var rect)) return;
             int width = rect.Right - rect.Left, height = rect.Bottom - rect.Top;
             double x = layout.RememberPosition ? layout.X ?? .5 : .5, y = layout.RememberPosition ? layout.Y ?? .5 : .5;
             SetWindowPos(hwnd, new IntPtr(-1), screenBounds.Left + (int)(Math.Max(0, screenBounds.Width - width) * x),

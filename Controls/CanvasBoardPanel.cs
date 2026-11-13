@@ -24,7 +24,10 @@ internal sealed class CanvasBoardPanel:Panel
         var blocks=Layout.Blocks.Where(b=>b.Visible&&elements.ContainsKey(b.Id)).ToArray();
         Fit=Layout.DesignWidth>0&&!SingleColumn?Math.Min(1,width/Layout.DesignWidth):1;
         foreach(var tile in elements.Values)tile.Margin=new Thickness(0,0,0,10*Fit);
-        double Measure(CanvasBlock b,double w,double x,double y){var t=elements[b.Id];t.Measure(new Size(Math.Max(1,w),double.PositiveInfinity));double h=t.DesiredSize.Height;slots[t]=new Rect(x,y,Math.Max(1,w),h);return h;}
+        // A saved anchor/reference size is not visible content. Fully hidden inner
+        // elements and runtime-collapsed cards must not reserve empty canvas space.
+        // Keep their authored positions intact so restoring content returns it there.
+        double Measure(CanvasBlock b,double w,double x,double y){var t=elements[b.Id];t.Measure(new Size(Math.Max(1,w),double.PositiveInfinity));if(!t.HasLayoutContent)return 0;double h=t.DesiredSize.Height;slots[t]=new Rect(x,y,Math.Max(1,w),h);return h;}
         if(Layout.DesignWidth>0&&!SingleColumn)
         {
             var pending=new Dictionary<string,Rect>();double bottom=0;
@@ -32,6 +35,7 @@ internal sealed class CanvasBoardPanel:Panel
             {
                 double w=Math.Min(width,b.Size.Width>0?b.Size.Width*Fit:width/2-7);
                 var t=elements[b.Id];t.Measure(new Size(w,double.PositiveInfinity));
+                if(!t.HasLayoutContent)continue;
                 var p=b.Position;double px=Math.Clamp((p?.X??0)*Fit,0,Math.Max(0,width-w));
                 double py=p!=null?p.Y*Fit:bottom;
                 pending[b.Id]=new Rect(px,py,w,t.DesiredSize.Height);bottom=Math.Max(bottom,py+t.DesiredSize.Height);
@@ -53,6 +57,8 @@ internal sealed class CanvasBoardPanel:Panel
             int span=b.Zone==0?12:(int)Math.Round(12*(b.Zone==1?LeftWeight:RightWeight)/(LeftWeight+RightWeight));
             if(b.Size.Width>0)span=(int)Math.Ceiling((b.Size.Width+14)/pitch);
             span=Math.Clamp(span,Math.Min(4,12),12);double w=Math.Min(width,span*pitch-14);
+            var tile=elements[b.Id];tile.Measure(new Size(Math.Max(1,w),double.PositiveInfinity));
+            if(!tile.HasLayoutContent)continue;
             if(x>0&&x+w>width+.5){y+=rowHeight;x=0;rowHeight=0;}
             rowHeight=Math.Max(rowHeight,Measure(b,w,x,y));x+=w+14;
         }
