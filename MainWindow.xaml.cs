@@ -865,6 +865,8 @@ namespace GraphiteCompanion
             if (info != null && session != null && session.Info.Id == info.Id && session.Eq != null == info.HasCmEq)
                 return;
 
+            // Restore bypassed effects on their original device before replacing session.
+            if (initialized) CompareOff();
             CloseSession();
             if (info == null)
             {
@@ -901,7 +903,7 @@ namespace GraphiteCompanion
             EqSwitch.IsEnabled = session.Eq != null;
             BandsGrid.Opacity = session.Eq != null ? 1 : 0.45;
             ReloadEffects();
-            if (initialized) { CompareOff(); RestoreDeviceProfile(); UpdateBrand(); UpdateMeters(); LoadPresetToUi(); }
+            if (initialized) { RestoreDeviceProfile(); UpdateBrand(); UpdateMeters(); LoadPresetToUi(); }
             Dispatcher.BeginInvoke(new Action(UpdateBattery), System.Windows.Threading.DispatcherPriority.Background);
         }
 

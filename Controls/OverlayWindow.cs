@@ -30,6 +30,7 @@ namespace GraphiteCompanion.Controls
         private readonly Button outputButton = new();
         private readonly Popup outputPopup = new() { StaysOpen = true, AllowsTransparency = true, Placement = PlacementMode.Bottom, PopupAnimation = PopupAnimation.Fade };
         private readonly StackPanel outputItems = new();
+        private readonly TextBlock outputError = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12, 6, 12, 10), Visibility = Visibility.Collapsed };
         private readonly Button replayButton = new(), recordButton = new(), shotButton = new(), regionButton = new();
         private readonly TextBlock title = new() { FontSize = 22, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
         private readonly TextBlock subtitle = new() { FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis };
@@ -406,10 +407,16 @@ namespace GraphiteCompanion.Controls
             outputButton.Click += (_, _) =>
             {
                 if (outputPopup.IsOpen) { outputPopup.IsOpen = false; return; }
+                outputError.Visibility = Visibility.Collapsed;
+                RefreshOutputs();
                 ((Border)outputPopup.Child).Width = outputButton.ActualWidth;
                 outputPopup.IsOpen = true;
             };
-            var popupBox = new Border { CornerRadius = new CornerRadius(12), Padding = new Thickness(6, 6, 6, 2), BorderThickness = new Thickness(1), Margin = new Thickness(0, 6, 0, 12), Child = outputItems,
+            outputError.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
+            var outputContent = new StackPanel();
+            outputContent.Children.Add(outputError);
+            outputContent.Children.Add(outputItems);
+            var popupBox = new Border { CornerRadius = new CornerRadius(12), Padding = new Thickness(6, 6, 6, 2), BorderThickness = new Thickness(1), Margin = new Thickness(0, 6, 0, 12), Child = outputContent,
                                         Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 24, ShadowDepth = 0, Opacity = 0.5 } };
             popupBox.SetResourceReference(Border.BackgroundProperty, "CardBrush");
             popupBox.SetResourceReference(Border.BorderBrushProperty, "CardBorderBrush");
@@ -879,12 +886,26 @@ namespace GraphiteCompanion.Controls
                 rb.SetResourceReference(StyleProperty, "Segment");
                 rb.Click += (_, _) =>
                 {
-                    outputPopup.IsOpen = false;
-                    if (dev.Id != current && DefaultDevice.Set(dev.Id)) main.SelectDeviceFromOutside(dev.Id);
+                    var result = DefaultDevice.Set(dev.Id);
+                    // Also follow an already selected Windows endpoint: the main window
+                    // may still be configuring another device, with its own preset.
+                    if (result.PlaybackSelected) main.SelectDeviceFromOutside(dev.Id);
                     Refresh();
+                    ShowOutputResult(result);
                 };
                 outputItems.Children.Add(rb);
             }
+        }
+
+        private void ShowOutputResult(DefaultDevice.ChangeResult result)
+        {
+            // Reposition the popup after its message changes, including at screen edges.
+            outputPopup.IsOpen = false;
+            outputError.Text = result.PlaybackSelected
+                ? "Выход для музыки и видео выбран. Для системных звуков или звонков переключение не удалось. Попробуйте ещё раз."
+                : "Не удалось переключить выход звука. Проверьте подключение устройства и попробуйте ещё раз.";
+            outputError.Visibility = result.AllRolesSelected ? Visibility.Collapsed : Visibility.Visible;
+            outputPopup.IsOpen = !result.AllRolesSelected;
         }
 
         private static bool IsHeadphones(AudioDeviceInfo? d) =>
